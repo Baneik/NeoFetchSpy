@@ -16,11 +16,19 @@ export type ResponseKind = 'json' | 'text';
 export type FilterOperator =
   | 'exists'
   | 'not_exists'
-  | 'equals'
-  | 'not_equals'
-  | 'regex'
-  | 'non_empty'
-  | 'empty';
+  | 'is_empty'
+  | 'is_not_empty'
+  | 'text_equals'
+  | 'text_not_equals'
+  | 'text_contains'
+  | 'text_not_contains'
+  | 'text_regex'
+  | 'number_equals'
+  | 'number_not_equals'
+  | 'number_gt'
+  | 'number_gte'
+  | 'number_lt'
+  | 'number_lte';
 
 export interface FilterCondition {
   field: string;

@@ -5,6 +5,7 @@ import {
   encodeRuleId,
   generateRuleId,
   parseRulesImport,
+  validateCondition,
   validateRule,
 } from '../src/core/rule-schema';
 
@@ -55,6 +56,48 @@ describe('rule schema', () => {
     const result = validateRule(rule);
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(1);
+  });
+
+  it('validates the current filter condition operators', () => {
+    expect(validateCondition({
+      field: 'title',
+      operator: 'text_contains',
+      value: 'taobao|jd',
+    }).valid).toBe(true);
+    expect(validateCondition({
+      field: 'title',
+      operator: 'text_regex',
+      value: '[',
+    }).valid).toBe(false);
+    expect(validateCondition({
+      field: 'title',
+      operator: 'text_contains',
+      value: ' | ',
+    }).valid).toBe(false);
+    expect(validateCondition({
+      field: 'title',
+      operator: 'text_regex',
+      value: '',
+    }).valid).toBe(false);
+    expect(validateCondition({
+      field: 'score',
+      operator: 'number_gte',
+      value: '42',
+    }).valid).toBe(true);
+    expect(validateCondition({
+      field: 'score',
+      operator: 'number_gte',
+      value: '',
+    }).valid).toBe(false);
+    expect(validateCondition({
+      field: 'jump_url',
+      operator: 'exists',
+    }).valid).toBe(true);
+    expect(validateCondition({
+      field: 'jump_url',
+      operator: 'regex' as never,
+      value: '^ad',
+    }).valid).toBe(false);
   });
 
   it('imports legacy rule arrays and normalizes schema fields', () => {

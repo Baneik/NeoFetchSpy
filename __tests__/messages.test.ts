@@ -49,6 +49,48 @@ describe('extension messages', () => {
         }],
       },
     })).toBe(false);
+    expect(isSettingsMessage({
+      ...message,
+      settings: {
+        ...settings,
+        rules: [{
+          ...settings.rules[0],
+          actions: [{
+            type: 'filter',
+            iterablePath: '$.data.items',
+            condition: { field: 'title', operator: 'text_contains' },
+          }],
+        }],
+      },
+    })).toBe(false);
+    expect(isSettingsMessage({
+      ...message,
+      settings: {
+        ...settings,
+        rules: [{
+          ...settings.rules[0],
+          actions: [{
+            type: 'filter',
+            iterablePath: '$.data.items',
+            condition: { field: 'title', operator: 'regex', value: '^ad' },
+          }],
+        }],
+      },
+    })).toBe(false);
+    expect(isSettingsMessage({
+      ...message,
+      settings: {
+        ...settings,
+        rules: [{
+          ...settings.rules[0],
+          actions: [{
+            type: 'filter',
+            iterablePath: '$.data.items',
+            condition: { field: 'title', operator: 'text_regex', value: '^ad' },
+          }],
+        }],
+      },
+    })).toBe(true);
   });
 
   it('requires versioned page ready messages', () => {

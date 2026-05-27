@@ -3,6 +3,7 @@ import { formatPageHostsText, parsePageHostsText } from '../core/rule-scope';
 import type {
   Action,
   FilterAction,
+  FilterOperator,
   RegexAction,
   ReplaceAction,
   Rule,
@@ -361,28 +362,24 @@ function renderActionEditor(rule: Rule, action: Action, index: number): HTMLElem
 
     const operatorField = createElement('div', { className: 'nfs-field nfs-field-operator' });
     operatorField.appendChild(createElement('label', { text: t('condition') }));
-    operatorField.appendChild(createSelect(
-      [
-        ['exists', t('exists')],
-        ['not_exists', t('notExists')],
-        ['non_empty', t('nonEmpty')],
-        ['empty', t('empty')],
-        ['equals', t('equals')],
-        ['not_equals', t('notEquals')],
-        ['regex', t('regexMatch')],
-      ],
+    operatorField.appendChild(createConditionSelect(
       action.condition.operator,
       (value) => {
         (action as FilterAction).condition.operator = value as FilterAction['condition']['operator'];
+        if (!conditionNeedsValue(value as FilterOperator)) {
+          (action as FilterAction).condition.value = undefined;
+        } else if ((action as FilterAction).condition.value === undefined) {
+          (action as FilterAction).condition.value = '';
+        }
         render();
       },
     ));
     body.appendChild(operatorField);
 
-    if (['equals', 'not_equals', 'regex'].includes(action.condition.operator)) {
-      body.appendChild(jsonValueField(t('compareValue'), action.condition.value, (value) => {
+    if (conditionNeedsValue(action.condition.operator)) {
+      body.appendChild(textField(t('compareValue'), stringifyValue(action.condition.value), (value) => {
         (action as FilterAction).condition.value = value;
-      }, 'json-value'));
+      }, conditionValuePlaceholder(action.condition.operator), 'json-value'));
     }
   }
 
@@ -538,6 +535,67 @@ function createSelect(
   }
   select.addEventListener('change', () => onChange(select.value));
   return select;
+}
+
+function createConditionSelect(
+  value: FilterOperator,
+  onChange: (value: string) => void,
+): HTMLSelectElement {
+  const groups: Array<[string, Array<[FilterOperator, string]>]> = [
+    [t('conditionGroupPath'), [
+      ['exists', t('exists')],
+      ['not_exists', t('notExists')],
+    ]],
+    [t('conditionGroupEmpty'), [
+      ['is_empty', t('isEmpty')],
+      ['is_not_empty', t('isNotEmpty')],
+    ]],
+    [t('conditionGroupText'), [
+      ['text_equals', t('textEquals')],
+      ['text_not_equals', t('textNotEquals')],
+      ['text_contains', t('textContains')],
+      ['text_not_contains', t('textNotContains')],
+      ['text_regex', t('regexMatch')],
+    ]],
+    [t('conditionGroupNumber'), [
+      ['number_equals', t('numberEquals')],
+      ['number_not_equals', t('numberNotEquals')],
+      ['number_gt', t('numberGreaterThan')],
+      ['number_gte', t('numberGreaterThanOrEqual')],
+      ['number_lt', t('numberLessThan')],
+      ['number_lte', t('numberLessThanOrEqual')],
+    ]],
+  ];
+
+  const select = createElement('select');
+  for (const [label, options] of groups) {
+    const group = document.createElement('optgroup');
+    group.label = label;
+    for (const [optionValue, optionLabel] of options) {
+      const option = createElement('option', {
+        text: optionLabel,
+        attrs: { value: optionValue },
+      });
+      option.selected = optionValue === value;
+      group.appendChild(option);
+    }
+    select.appendChild(group);
+  }
+  select.addEventListener('change', () => onChange(select.value));
+  return select;
+}
+
+function conditionNeedsValue(operator: FilterOperator): boolean {
+  return operator.startsWith('text_') || operator.startsWith('number_');
+}
+
+function conditionValuePlaceholder(operator: FilterOperator): string {
+  if (operator === 'text_regex') return t('placeholderRegexPattern');
+  if (operator === 'text_contains' || operator === 'text_not_contains') {
+    return t('placeholderKeywords');
+  }
+  if (operator.startsWith('number_')) return t('placeholderNumberValue');
+  return t('placeholderTextValue');
 }
 
 function createSwitch(

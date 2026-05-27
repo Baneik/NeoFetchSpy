@@ -5,8 +5,44 @@ import type { Action } from '../src/core/types';
 describe('modifier', () => {
   it('tests filter conditions', () => {
     expect(testCondition({ jump_url: 'x' }, { field: 'jump_url', operator: 'exists' })).toBe(true);
-    expect(testCondition({ jump_url: {} }, { field: 'jump_url', operator: 'empty' })).toBe(true);
-    expect(testCondition({ name: 'ad-link' }, { field: 'name', operator: 'regex', value: '^ad' })).toBe(true);
+    expect(testCondition({ jump_url: undefined }, { field: 'jump_url', operator: 'exists' })).toBe(true);
+    expect(testCondition({}, { field: 'jump_url', operator: 'not_exists' })).toBe(true);
+    expect(testCondition({ jump_url: {} }, { field: 'jump_url', operator: 'is_empty' })).toBe(true);
+    expect(testCondition({ jump_url: 0 }, { field: 'jump_url', operator: 'is_not_empty' })).toBe(true);
+    expect(testCondition({ name: 'ad-link' }, { field: 'name', operator: 'text_regex', value: '^ad' })).toBe(true);
+  });
+
+  it('tests text and number conditions', () => {
+    expect(testCondition({ name: 'ad-link' }, {
+      field: 'name',
+      operator: 'text_contains',
+      value: 'shop|ad',
+    })).toBe(true);
+    expect(testCondition({ name: 'ad-link' }, {
+      field: 'name',
+      operator: 'text_not_contains',
+      value: 'shop|promo',
+    })).toBe(true);
+    expect(testCondition({ name: 'ad-link' }, {
+      field: 'name',
+      operator: 'text_not_contains',
+      value: '',
+    })).toBe(false);
+    expect(testCondition({ score: '42' }, {
+      field: 'score',
+      operator: 'number_gte',
+      value: 40,
+    })).toBe(true);
+    expect(testCondition({ score: 42 }, {
+      field: 'score',
+      operator: 'number_lt',
+      value: '50',
+    })).toBe(true);
+    expect(testCondition({ score: '' }, {
+      field: 'score',
+      operator: 'number_equals',
+      value: 0,
+    })).toBe(false);
   });
 
   it('filters array items in place', () => {

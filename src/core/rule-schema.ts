@@ -26,11 +26,38 @@ const HTTP_METHODS = new Set<HttpMethod>([
 const FILTER_OPERATORS = new Set<FilterOperator>([
   'exists',
   'not_exists',
-  'equals',
-  'not_equals',
-  'regex',
-  'non_empty',
-  'empty',
+  'is_empty',
+  'is_not_empty',
+  'text_equals',
+  'text_not_equals',
+  'text_contains',
+  'text_not_contains',
+  'text_regex',
+  'number_equals',
+  'number_not_equals',
+  'number_gt',
+  'number_gte',
+  'number_lt',
+  'number_lte',
+]);
+
+const VALUE_FILTER_OPERATORS = new Set<FilterOperator>([
+  'text_equals',
+  'text_not_equals',
+  'text_contains',
+  'text_not_contains',
+  'text_regex',
+  'number_equals',
+  'number_not_equals',
+  'number_gt',
+  'number_gte',
+  'number_lt',
+  'number_lte',
+]);
+
+const KEYWORD_FILTER_OPERATORS = new Set<FilterOperator>([
+  'text_contains',
+  'text_not_contains',
 ]);
 
 const RULE_ID_PREFIX = 'rule_';
@@ -245,12 +272,28 @@ export function validateCondition(condition: FilterCondition): ValidationResult 
   if (!condition.field.trim()) errors.push('字段路径不能为空');
   if (!FILTER_OPERATORS.has(condition.operator)) errors.push('操作符无效');
   if (
-    (condition.operator === 'equals' ||
-      condition.operator === 'not_equals' ||
-      condition.operator === 'regex') &&
-    condition.value === undefined
+    VALUE_FILTER_OPERATORS.has(condition.operator) && condition.value === undefined
   ) {
     errors.push('该操作符需要比较值');
+  }
+  if (
+    KEYWORD_FILTER_OPERATORS.has(condition.operator)
+    && !hasKeywords(condition.value)
+  ) {
+    errors.push('关键词不能为空');
+  }
+  if (condition.operator === 'text_regex' && isBlankString(condition.value)) {
+    errors.push('正则表达式不能为空');
+  }
+  if (condition.operator === 'text_regex' && condition.value !== undefined) {
+    try {
+      new RegExp(String(condition.value));
+    } catch {
+      errors.push('正则表达式无效');
+    }
+  }
+  if (condition.operator.startsWith('number_') && !isFiniteNumberLiteral(condition.value)) {
+    errors.push('数值比较值无效');
   }
   return { valid: errors.length === 0, errors };
 }
@@ -349,7 +392,7 @@ function normalizeAction(input: unknown): Action | null {
 
 function normalizeCondition(input: unknown): FilterCondition {
   if (!isRecord(input)) return { field: '', operator: 'exists' };
-  const operator = typeof input.operator === 'string' && FILTER_OPERATORS.has(input.operator as FilterOperator)
+  const operator = typeof input.operator === 'string'
     ? (input.operator as FilterOperator)
     : 'exists';
   return {
@@ -357,6 +400,24 @@ function normalizeCondition(input: unknown): FilterCondition {
     operator,
     value: input.value,
   };
+}
+
+function isFiniteNumberLiteral(value: unknown): boolean {
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && Number.isFinite(Number(trimmed));
+}
+
+function hasKeywords(value: unknown): boolean {
+  if (value === undefined) return false;
+  return String(value)
+    .split('|')
+    .some((part) => part.trim().length > 0);
+}
+
+function isBlankString(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length === 0;
 }
 
 function normalizeMethod(input: unknown): HttpMethod {

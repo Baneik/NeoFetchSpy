@@ -78,24 +78,41 @@ export function resolveArray(obj: unknown, path: string): unknown[] | null {
 }
 
 export function getField(obj: unknown, fieldPath: string): unknown {
-  return getFieldRecursive(obj, fieldPath.split('.'), 0);
+  return resolveField(obj, fieldPath).value;
 }
 
-function getFieldRecursive(current: unknown, parts: string[], index: number): unknown {
-  if (index >= parts.length) return current;
-  if (current == null || typeof current !== 'object') return undefined;
+export interface FieldResolution {
+  exists: boolean;
+  value: unknown;
+}
+
+export function resolveField(obj: unknown, fieldPath: string): FieldResolution {
+  return resolveFieldRecursive(obj, fieldPath.split('.'), 0);
+}
+
+function resolveFieldRecursive(current: unknown, parts: string[], index: number): FieldResolution {
+  if (index >= parts.length) return { exists: true, value: current };
+  if (current == null || typeof current !== 'object') return { exists: false, value: undefined };
 
   const part = parts[index];
+  const record = current as Record<string, unknown>;
 
   if (part === '*') {
-    for (const key of Object.keys(current)) {
-      const result = getFieldRecursive((current as Record<string, unknown>)[key], parts, index + 1);
-      if (result !== undefined) return result;
+    let firstExisting: FieldResolution | null = null;
+    for (const key of Object.keys(record)) {
+      const result = resolveFieldRecursive(record[key], parts, index + 1);
+      if (!result.exists) continue;
+      firstExisting ??= result;
+      if (result.value !== undefined) return result;
     }
-    return undefined;
+    return firstExisting ?? { exists: false, value: undefined };
   }
 
-  return getFieldRecursive((current as Record<string, unknown>)[part], parts, index + 1);
+  if (!Object.prototype.hasOwnProperty.call(record, part)) {
+    return { exists: false, value: undefined };
+  }
+
+  return resolveFieldRecursive(record[part], parts, index + 1);
 }
 
 function deleteSimple(obj: unknown, path: string): void {

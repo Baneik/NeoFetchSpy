@@ -97,7 +97,9 @@ function isAction(value: unknown): value is Action {
 
 function isFilterCondition(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  return typeof value.field === 'string' && isFilterOperator(value.operator);
+  return typeof value.field === 'string'
+    && isFilterOperator(value.operator)
+    && (!filterOperatorNeedsValue(value.operator) || value.value !== undefined);
 }
 
 function isHttpMethod(value: unknown): value is HttpMethod | undefined {
@@ -119,11 +121,23 @@ function isResponseKind(value: unknown): value is ResponseKind | undefined {
 function isFilterOperator(value: unknown): value is FilterOperator {
   return value === 'exists'
     || value === 'not_exists'
-    || value === 'equals'
-    || value === 'not_equals'
-    || value === 'regex'
-    || value === 'non_empty'
-    || value === 'empty';
+    || value === 'is_empty'
+    || value === 'is_not_empty'
+    || value === 'text_equals'
+    || value === 'text_not_equals'
+    || value === 'text_contains'
+    || value === 'text_not_contains'
+    || value === 'text_regex'
+    || value === 'number_equals'
+    || value === 'number_not_equals'
+    || value === 'number_gt'
+    || value === 'number_gte'
+    || value === 'number_lt'
+    || value === 'number_lte';
+}
+
+function filterOperatorNeedsValue(operator: FilterOperator): boolean {
+  return operator.startsWith('text_') || operator.startsWith('number_');
 }
 
 function isStringMap(value: unknown): value is Record<string, string> | undefined {

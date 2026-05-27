@@ -274,12 +274,28 @@ Supported filter operators:
 ```text
 exists
 not_exists
-equals
-not_equals
-regex
-non_empty
-empty
+is_empty
+is_not_empty
+text_equals
+text_not_equals
+text_contains
+text_not_contains
+text_regex
+number_equals
+number_not_equals
+number_gt
+number_gte
+number_lt
+number_lte
 ```
+
+`exists` and `not_exists` check whether the field path exists, not whether its value is truthy. A present property with `undefined`, `null`, `false`, `0`, or `""` still counts as existing.
+
+`is_empty` treats `undefined`, `null`, `""`, `[]`, and `{}` as empty. `0` and `false` are not empty.
+
+Text operators compare string values. `text_contains` and `text_not_contains` accept literal keywords separated with `|`, for example `taobao|jd|tmall`. `text_regex` accepts the regular expression body without `/.../` delimiters.
+
+Number operators compare finite numbers or numeric strings. Empty strings and non-numeric text are not treated as numbers.
 
 Field paths support dot notation and a simple dynamic-key wildcard:
 

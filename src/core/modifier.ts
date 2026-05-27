@@ -1,5 +1,5 @@
 import type { Action, FilterAction, FilterCondition, RegexAction } from './types';
-import { deleteByPath, getField, replaceByPath, resolveArray } from './jsonpath';
+import { deleteByPath, replaceByPath, resolveArray, resolveField } from './jsonpath';
 
 export function applyActions(body: unknown, actions: Action[], isJson: boolean): unknown {
   let result = body;
@@ -23,23 +23,39 @@ export function applyFilter(body: unknown, action: FilterAction): unknown {
 }
 
 export function testCondition(item: unknown, condition: FilterCondition): boolean {
-  const fieldValue = getField(item, condition.field);
+  const field = resolveField(item, condition.field);
 
   switch (condition.operator) {
     case 'exists':
-      return fieldValue !== undefined;
+      return field.exists;
     case 'not_exists':
-      return fieldValue === undefined;
-    case 'equals':
-      return fieldValue === condition.value;
-    case 'not_equals':
-      return fieldValue !== condition.value;
-    case 'regex':
-      return testRegexCondition(fieldValue, condition.value);
-    case 'non_empty':
-      return isNonEmpty(fieldValue);
-    case 'empty':
-      return !isNonEmpty(fieldValue);
+      return !field.exists;
+    case 'is_empty':
+      return field.exists && isEmptyValue(field.value);
+    case 'is_not_empty':
+      return field.exists && !isEmptyValue(field.value);
+    case 'text_equals':
+      return field.exists && String(field.value) === String(condition.value);
+    case 'text_not_equals':
+      return field.exists && String(field.value) !== String(condition.value);
+    case 'text_contains':
+      return field.exists && testTextContains(field.value, condition.value);
+    case 'text_not_contains':
+      return field.exists && testTextNotContains(field.value, condition.value);
+    case 'text_regex':
+      return field.exists && testRegexCondition(field.value, condition.value);
+    case 'number_equals':
+      return testNumberComparison(field.value, condition.value, (left, right) => left === right);
+    case 'number_not_equals':
+      return testNumberComparison(field.value, condition.value, (left, right) => left !== right);
+    case 'number_gt':
+      return testNumberComparison(field.value, condition.value, (left, right) => left > right);
+    case 'number_gte':
+      return testNumberComparison(field.value, condition.value, (left, right) => left >= right);
+    case 'number_lt':
+      return testNumberComparison(field.value, condition.value, (left, right) => left < right);
+    case 'number_lte':
+      return testNumberComparison(field.value, condition.value, (left, right) => left <= right);
     default:
       return false;
   }
@@ -70,7 +86,6 @@ function applyAction(body: unknown, action: Action, isJson: boolean): unknown {
 }
 
 function testRegexCondition(fieldValue: unknown, pattern: unknown): boolean {
-  if (fieldValue === undefined) return false;
   try {
     return new RegExp(String(pattern)).test(String(fieldValue));
   } catch {
@@ -78,10 +93,50 @@ function testRegexCondition(fieldValue: unknown, pattern: unknown): boolean {
   }
 }
 
-function isNonEmpty(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  if (typeof value === 'string') return value.length > 0;
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === 'object') return Object.keys(value).length > 0;
-  return true;
+function testTextContains(fieldValue: unknown, keywords: unknown): boolean {
+  const text = String(fieldValue);
+  const parts = splitKeywords(keywords);
+  return parts.length > 0 && parts.some((part) => text.includes(part));
+}
+
+function testTextNotContains(fieldValue: unknown, keywords: unknown): boolean {
+  const text = String(fieldValue);
+  const parts = splitKeywords(keywords);
+  return parts.length > 0 && parts.every((part) => !text.includes(part));
+}
+
+function splitKeywords(keywords: unknown): string[] {
+  return String(keywords)
+    .split('|')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function testNumberComparison(
+  fieldValue: unknown,
+  conditionValue: unknown,
+  compare: (left: number, right: number) => boolean,
+): boolean {
+  const left = toFiniteNumber(fieldValue);
+  const right = toFiniteNumber(conditionValue);
+  return left !== null && right !== null && compare(left, right);
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const numericValue = Number(trimmed);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+function isEmptyValue(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (typeof value === 'string') return value.length === 0;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value).length === 0;
+  return false;
 }

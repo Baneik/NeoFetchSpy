@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deleteByPath, getField, query, replaceByPath, resolveArray } from '../src/core/jsonpath';
+import { deleteByPath, getField, query, replaceByPath, resolveArray, resolveField } from '../src/core/jsonpath';
 
 describe('jsonpath helpers', () => {
   it('queries JSONPath values', () => {
@@ -34,5 +34,31 @@ describe('jsonpath helpers', () => {
       },
     };
     expect(getField(item, 'content.jump_url.*.extra.goods_item_id')).toBe(99);
+  });
+
+  it('resolves field existence separately from field value', () => {
+    expect(resolveField({ data: { status: undefined } }, 'data.status')).toEqual({
+      exists: true,
+      value: undefined,
+    });
+    expect(resolveField({ data: {} }, 'data.status')).toEqual({
+      exists: false,
+      value: undefined,
+    });
+    expect(resolveField({ data: { items: { a: { status: undefined } } } }, 'data.items.*.status')).toEqual({
+      exists: true,
+      value: undefined,
+    });
+    expect(resolveField({
+      data: {
+        items: {
+          a: { status: undefined },
+          b: { status: 'ready' },
+        },
+      },
+    }, 'data.items.*.status')).toEqual({
+      exists: true,
+      value: 'ready',
+    });
   });
 });
