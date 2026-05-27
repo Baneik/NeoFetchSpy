@@ -1,6 +1,6 @@
 {
   "name": "neofetchspy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Manifest V3 browser extension for intercepting and modifying fetch responses with configurable rules",
   "type": "module",
   "scripts": {
