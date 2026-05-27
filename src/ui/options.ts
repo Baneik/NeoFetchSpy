@@ -591,12 +591,13 @@ function renderedStatusMessage(): string {
 }
 
 function duplicateRule(rule: Rule): void {
+  const now = Date.now();
   const copy: Rule = {
     ...structuredClone(rule),
-    id: generateRuleId(),
+    id: generateRuleId(now),
     name: `${rule.name || t('unnamedRule')} ${t('ruleCopySuffix')}`,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
   };
   settings.rules.unshift(copy);
   selectedRuleId = copy.id;

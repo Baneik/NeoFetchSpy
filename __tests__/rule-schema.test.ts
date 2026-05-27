@@ -1,9 +1,49 @@
-import { describe, expect, it } from 'vitest';
-import { createRule, parseRulesImport, validateRule } from '../src/core/rule-schema';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  createRule,
+  decodeRuleId,
+  encodeRuleId,
+  generateRuleId,
+  parseRulesImport,
+  validateRule,
+} from '../src/core/rule-schema';
 
 describe('rule schema', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('creates valid default rules', () => {
     expect(validateRule(createRule()).valid).toBe(true);
+  });
+
+  it('generates compact reversible rule ids', () => {
+    const createdAt = Date.UTC(2026, 4, 28, 3, 12, 45, 678);
+    const id = encodeRuleId(createdAt, 42);
+
+    expect(id).toMatch(/^rule_[0-9A-Za-z]{11}$/);
+    expect(decodeRuleId(id)).toEqual({
+      createdAt,
+      random6: '000042',
+    });
+  });
+
+  it('uses the current timestamp when generating rule ids', () => {
+    const createdAt = Date.UTC(2026, 4, 28, 3, 12, 45, 678);
+    vi.spyOn(Date, 'now').mockReturnValue(createdAt);
+
+    const decoded = decodeRuleId(generateRuleId());
+
+    expect(decoded?.createdAt).toBe(createdAt);
+    expect(decoded?.random6).toMatch(/^\d{6}$/);
+  });
+
+  it('uses the rule created timestamp when creating ids', () => {
+    const createdAt = Date.UTC(2026, 4, 28, 3, 12, 45, 678);
+    const rule = createRule({ createdAt });
+
+    expect(decodeRuleId(rule.id)?.createdAt).toBe(createdAt);
+    expect(rule.createdAt).toBe(createdAt);
   });
 
   it('validates missing URL and invalid regex', () => {

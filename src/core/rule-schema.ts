@@ -32,6 +32,17 @@ const FILTER_OPERATORS = new Set<FilterOperator>([
   'empty',
 ]);
 
+const RULE_ID_PREFIX = 'rule_';
+const RULE_ID_ALPHABET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const RULE_ID_BASE = BigInt(RULE_ID_ALPHABET.length);
+const RULE_ID_LENGTH = 11;
+const RULE_ID_EPOCH_MS = Date.UTC(2020, 0, 1);
+const RULE_ID_RANDOM_RANGE = 1_000_000n;
+const RULE_ID_SPACE = 1n << 63n;
+const RULE_ID_MULTIPLIER = 6364136223846793005n;
+const RULE_ID_INCREMENT = 1442695040888963407n;
+const RULE_ID_MULTIPLIER_INVERSE = modularInverse(RULE_ID_MULTIPLIER, RULE_ID_SPACE);
+
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
@@ -40,6 +51,11 @@ export interface ValidationResult {
 export interface ImportResult {
   rules: Rule[];
   errors: string[];
+}
+
+export interface DecodedRuleId {
+  createdAt: number;
+  random6: string;
 }
 
 export const DEFAULT_SETTINGS: RuntimeSettings = {
@@ -52,9 +68,10 @@ export const DEFAULT_SETTINGS: RuntimeSettings = {
 
 export function createRule(overrides: Partial<Rule> = {}): Rule {
   const now = Date.now();
+  const createdAt = overrides.createdAt ?? now;
   return {
     schemaVersion: RULE_SCHEMA_VERSION,
-    id: overrides.id ?? generateRuleId(),
+    id: overrides.id ?? generateRuleId(createdAt),
     name: overrides.name ?? '新规则',
     enabled: overrides.enabled ?? true,
     match: {
@@ -72,7 +89,7 @@ export function createRule(overrides: Partial<Rule> = {}): Rule {
         condition: { field: 'jump_url', operator: 'exists' },
       },
     ],
-    createdAt: overrides.createdAt ?? now,
+    createdAt,
     updatedAt: overrides.updatedAt ?? now,
   };
 }
@@ -147,13 +164,14 @@ export function normalizeRule(input: unknown): Rule | null {
   }
 
   const now = Date.now();
+  const createdAt = typeof input.createdAt === 'number' ? input.createdAt : now;
   const method = normalizeMethod(input.match.method);
   const responseType =
     input.responseType === 'json' || input.responseType === 'text' ? input.responseType : undefined;
 
   return {
     schemaVersion: RULE_SCHEMA_VERSION,
-    id: typeof input.id === 'string' && input.id ? input.id : generateRuleId(),
+    id: typeof input.id === 'string' && input.id ? input.id : generateRuleId(createdAt),
     name: typeof input.name === 'string' ? input.name : '未命名规则',
     enabled: typeof input.enabled === 'boolean' ? input.enabled : true,
     match: {
@@ -167,7 +185,7 @@ export function normalizeRule(input: unknown): Rule | null {
     actions: input.actions
       .map((action) => normalizeAction(action))
       .filter((action): action is Action => action !== null),
-    createdAt: typeof input.createdAt === 'number' ? input.createdAt : now,
+    createdAt,
     updatedAt: now,
   };
 }
@@ -227,8 +245,48 @@ export function validateCondition(condition: FilterCondition): ValidationResult 
   return { valid: errors.length === 0, errors };
 }
 
-export function generateRuleId(): string {
-  return `rule_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+export function generateRuleId(createdAt = Date.now()): string {
+  return encodeRuleId(createdAt, randomSixDigit());
+}
+
+export function encodeRuleId(createdAt: number, random6: number): string {
+  if (!Number.isSafeInteger(createdAt)) {
+    throw new Error('Rule id timestamp must be a safe integer');
+  }
+  if (!Number.isInteger(random6) || random6 < 0 || random6 >= Number(RULE_ID_RANDOM_RANGE)) {
+    throw new Error('Rule id random value must be between 0 and 999999');
+  }
+
+  const timestampOffsetMs = BigInt(createdAt - RULE_ID_EPOCH_MS);
+  if (timestampOffsetMs < 0n) {
+    throw new Error('Rule id timestamp is before the rule id epoch');
+  }
+
+  const payload = timestampOffsetMs * RULE_ID_RANDOM_RANGE + BigInt(random6);
+  if (payload >= RULE_ID_SPACE) {
+    throw new Error('Rule id payload is too large');
+  }
+
+  return `${RULE_ID_PREFIX}${toBase62(maskRuleIdPayload(payload))}`;
+}
+
+export function decodeRuleId(id: string): DecodedRuleId | null {
+  if (!id.startsWith(RULE_ID_PREFIX)) return null;
+
+  const encoded = id.slice(RULE_ID_PREFIX.length);
+  if (encoded.length !== RULE_ID_LENGTH) return null;
+
+  const masked = fromBase62(encoded);
+  if (masked === null || masked >= RULE_ID_SPACE) return null;
+
+  const payload = unmaskRuleIdPayload(masked);
+  const timestampOffsetMs = payload / RULE_ID_RANDOM_RANGE;
+  const random6 = payload % RULE_ID_RANDOM_RANGE;
+
+  return {
+    createdAt: RULE_ID_EPOCH_MS + Number(timestampOffsetMs),
+    random6: random6.toString().padStart(6, '0'),
+  };
 }
 
 function toRuntimeRule(rule: Rule): RuntimeRule {
@@ -309,4 +367,83 @@ function normalizeStringMap(input: unknown, lowercaseKeys = false): Record<strin
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function randomSixDigit(): number {
+  const range = Number(RULE_ID_RANDOM_RANGE);
+  const cryptoObject = globalThis.crypto;
+
+  if (cryptoObject?.getRandomValues) {
+    const values = new Uint32Array(1);
+    const limit = Math.floor(0x100000000 / range) * range;
+    let value = 0;
+
+    do {
+      cryptoObject.getRandomValues(values);
+      value = values[0];
+    } while (value >= limit);
+
+    return value % range;
+  }
+
+  return Math.floor(Math.random() * range);
+}
+
+function maskRuleIdPayload(payload: bigint): bigint {
+  return mod(payload * RULE_ID_MULTIPLIER + RULE_ID_INCREMENT, RULE_ID_SPACE);
+}
+
+function unmaskRuleIdPayload(masked: bigint): bigint {
+  return mod((masked - RULE_ID_INCREMENT) * RULE_ID_MULTIPLIER_INVERSE, RULE_ID_SPACE);
+}
+
+function toBase62(value: bigint): string {
+  if (value === 0n) return '0'.repeat(RULE_ID_LENGTH);
+
+  let current = value;
+  let encoded = '';
+
+  while (current > 0n) {
+    const digit = Number(current % RULE_ID_BASE);
+    encoded = RULE_ID_ALPHABET[digit] + encoded;
+    current /= RULE_ID_BASE;
+  }
+
+  return encoded.padStart(RULE_ID_LENGTH, '0');
+}
+
+function fromBase62(value: string): bigint | null {
+  let decoded = 0n;
+
+  for (const char of value) {
+    const digit = RULE_ID_ALPHABET.indexOf(char);
+    if (digit === -1) return null;
+    decoded = decoded * RULE_ID_BASE + BigInt(digit);
+  }
+
+  return decoded;
+}
+
+function modularInverse(value: bigint, modulus: bigint): bigint {
+  let oldR = modulus;
+  let r = mod(value, modulus);
+  let oldT = 0n;
+  let t = 1n;
+
+  while (r !== 0n) {
+    const quotient = oldR / r;
+    [oldR, r] = [r, oldR - quotient * r];
+    [oldT, t] = [t, oldT - quotient * t];
+  }
+
+  if (oldR !== 1n) {
+    throw new Error('Rule id multiplier is not invertible');
+  }
+
+  return mod(oldT, modulus);
+}
+
+function mod(value: bigint, modulus: bigint): bigint {
+  const remainder = value % modulus;
+  return remainder >= 0n ? remainder : remainder + modulus;
 }
