@@ -17,14 +17,22 @@
 body {
   width: 340px;
   margin: 0;
+  overflow-x: hidden;
   background: var(--nfs-bg);
   color: var(--nfs-text);
   font-family: var(--nfs-font);
   letter-spacing: 0;
 }
 
+#popup-root {
+  width: 100%;
+  min-width: 0;
+}
+
 .nfs-popup {
   display: grid;
+  width: 100%;
+  min-width: 0;
   gap: 14px;
   padding: 16px;
 }
@@ -71,11 +79,13 @@ body {
 
 .nfs-popup-rules {
   display: grid;
+  min-width: 0;
   gap: 8px;
 }
 
 .nfs-popup-rule,
 .nfs-popup-empty {
+  min-width: 0;
   padding: 10px;
   border: 1px solid var(--nfs-border);
   border-radius: 8px;

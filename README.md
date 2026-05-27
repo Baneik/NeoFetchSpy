@@ -1,5 +1,7 @@
 # NeoFetchSpy
 
+[简体中文](./README.zh-CN.md) | English
+
 NeoFetchSpy is a Manifest V3 browser extension for intercepting page `window.fetch` calls and modifying JSON or text responses with user-defined rules.
 
 It is designed for local debugging, response shaping, API inspection, front-end development, and quick experiments where changing the server is slower than changing the response in the browser.
