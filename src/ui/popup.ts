@@ -46,14 +46,21 @@ function render(): void {
   language.appendChild(createLanguageSelect());
 
   const rules = createElement('div', { className: 'nfs-popup-rules' });
-  const activeRules = settings.rules.filter((rule) => rule.enabled).slice(0, 4);
-  if (activeRules.length === 0) {
-    rules.appendChild(createElement('div', { className: 'nfs-popup-empty', text: t('noActiveRules') }));
+  if (settings.rules.length === 0) {
+    rules.appendChild(createElement('div', { className: 'nfs-popup-empty', text: t('noMatchingRules') }));
   } else {
-    for (const rule of activeRules) {
-      const row = createElement('div', { className: 'nfs-popup-rule' });
-      row.appendChild(createElement('strong', { text: rule.name || t('unnamedRule') }));
-      row.appendChild(createElement('code', { text: rule.match.url }));
+    for (const rule of settings.rules) {
+      const ruleName = rule.name || t('unnamedRule');
+      const row = createElement('div', {
+        className: `nfs-popup-rule${rule.enabled ? '' : ' is-disabled'}`,
+      });
+      row.appendChild(createElement('strong', { text: ruleName }));
+      row.appendChild(createSwitch(rule.enabled, `${t('switchRuleAria')}: ${ruleName}`, async (enabled) => {
+        rule.enabled = enabled;
+        await saveSettings(settings);
+        settings = await loadSettings();
+        render();
+      }));
       rules.appendChild(row);
     }
   }

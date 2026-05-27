@@ -80,6 +80,9 @@ body {
 .nfs-popup-rules {
   display: grid;
   min-width: 0;
+  max-height: 232px;
+  overflow-y: auto;
+  padding-right: 2px;
   gap: 8px;
 }
 
@@ -92,23 +95,27 @@ body {
   background: var(--nfs-panel);
 }
 
+.nfs-popup-rule {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .nfs-popup-rule strong {
   display: block;
+  min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
-  margin-bottom: 5px;
   font-size: 13px;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.nfs-popup-rule code {
-  display: block;
-  overflow: hidden;
+.nfs-popup-rule.is-disabled strong {
   color: var(--nfs-muted);
-  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .nfs-popup-empty {
