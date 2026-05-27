@@ -89,4 +89,20 @@ describe('rule schema', () => {
     expect(result.errors).toEqual([]);
     expect(result.rules[0].match.postForm).toEqual({ token: 'abc*' });
   });
+
+  it('imports page host scopes', () => {
+    const result = parseRulesImport(JSON.stringify({
+      id: 'scoped',
+      name: 'scoped',
+      enabled: true,
+      scope: {
+        pageHosts: ['Example.com', '*.Example.com', ''],
+      },
+      match: { url: '*://example.com/*' },
+      actions: [{ type: 'delete', path: '$.debug' }],
+    }));
+
+    expect(result.errors).toEqual([]);
+    expect(result.rules[0].scope?.pageHosts).toEqual(['example.com', '*.example.com']);
+  });
 });

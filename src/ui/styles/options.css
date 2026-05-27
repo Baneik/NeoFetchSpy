@@ -393,6 +393,11 @@ html[lang="ja"] .nfs-tools .nfs-btn {
   width: min(100%, 26rem);
 }
 
+.nfs-field-page-hosts {
+  flex: 1 1 22rem;
+  max-width: 34rem;
+}
+
 .nfs-field-response {
   flex: 0 0 10rem;
   width: 10rem;
@@ -656,6 +661,7 @@ html[lang="ja"] .nfs-tools .nfs-btn {
   }
 
   .nfs-field-name,
+  .nfs-field-page-hosts,
   .nfs-field-response,
   .nfs-basic-debug,
   .nfs-field-url,

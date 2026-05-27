@@ -10,6 +10,7 @@ NeoFetchSpy 是一个 Manifest V3 浏览器扩展，用于拦截页面中的 `wi
 
 - 在 `document_start` 阶段、页面 MAIN world 中拦截 `window.fetch`。
 - 按 URL 通配符、HTTP Method、Query 参数、请求 Header 和 POST 表单字段匹配请求。
+- 支持按页面域名限制规则作用范围，仅向页面 hook 发送当前页面相关的规则。
 - 通过有序 action 修改 JSON 响应：
   - 删除 JSONPath 目标字段
   - 替换 JSONPath 目标值
@@ -45,6 +46,7 @@ NeoFetchSpy 是一个 Manifest V3 浏览器扩展，用于拦截页面中的 `wi
 2. `contentBridge`
    - 运行在扩展 isolated world。
    - 从 `chrome.storage.local` 读取设置。
+   - 按当前页面域名过滤运行时规则。
    - 向 `pageHook` 发送精简后的运行时规则。
    - 监听存储变化，并及时同步新的运行配置。
 
@@ -66,6 +68,7 @@ src/extension/
 
 src/core/
   matcher.ts             请求解析与通配符匹配。
+  rule-scope.ts          页面域名作用域归一化与过滤。
   rule-index.ts          预编译运行时规则索引。
   rule-engine.ts         规则选择与响应类型处理。
   modifier.ts            JSON/Text action 执行。
@@ -88,6 +91,7 @@ __tests__/
 每条规则由以下部分组成：
 
 - `match`：请求匹配条件。
+- `scope`：可选的页面域名作用域。
 - `responseType`：可选的响应 body 类型覆盖。
 - `actions`：按顺序执行的响应修改操作。
 - 元数据：id、名称、启用状态、时间戳和 schema 版本。
@@ -100,6 +104,9 @@ __tests__/
   "id": "remove-shopping-items",
   "name": "移除购物推广",
   "enabled": true,
+  "scope": {
+    "pageHosts": ["example.com", "*.example.com"]
+  },
   "match": {
     "url": "*://api.example.com/feed*",
     "method": "POST",
@@ -129,6 +136,20 @@ __tests__/
   "updatedAt": 1710000000000
 }
 ```
+
+## 页面域名作用域
+
+`scope.pageHosts` 控制规则可以在哪些页面上运行。它匹配的是当前页面域名，不是 fetch 请求 URL。
+
+支持的写法：
+
+```text
+*
+example.com
+*.example.com
+```
+
+缺失或为空时保持旧行为，在所有页面生效。`*.example.com` 同时匹配 `example.com` 和 `api.example.com` 等子域名。
 
 ## 请求匹配
 
@@ -303,6 +324,7 @@ Regex action 对文本响应执行正则替换。
 ## 可靠性说明
 
 - 扩展会先匹配请求，再决定是否读取响应 body。
+- isolated content bridge 会先按页面域名过滤规则，再向 MAIN world 页面 hook 发送运行时配置。
 - 仅当匹配规则中存在适用于该响应类型的 action 时，才会解析响应内容。
 - `HEAD`、`204`、`205` 和 `304` 响应不会被重写，因为这些响应不适合携带替换 body。
 - 重写响应时会移除旧的 `content-length` 和 `content-encoding`，避免响应元信息失效。
@@ -321,7 +343,7 @@ Regex action 对文本响应执行正则替换。
 
 由于扩展允许用户配置对任意网站的 fetch 请求进行拦截，因此当前使用 `<all_urls>`。如果将扩展公开上架，建议进一步评估 optional host permissions，或限制默认匹配范围。
 
-`pageHook` 必须运行于页面 MAIN world 才能修改 `window.fetch`。这意味着页面脚本与拦截逻辑处于同一执行环境。NeoFetchSpy 已尽量仅同步精简的运行时配置，并严格校验消息；但 MAIN world 中的匹配逻辑仍应视作页面可观察内容。
+`pageHook` 必须运行于页面 MAIN world 才能修改 `window.fetch`。这意味着页面脚本与拦截逻辑处于同一执行环境。NeoFetchSpy 会先按当前页面过滤规则，并仅同步精简的运行时配置，同时严格校验消息；但 MAIN world 中的匹配逻辑仍应视作页面可观察内容。
 
 ## 开发方式
 

@@ -10,6 +10,7 @@ It is designed for local debugging, response shaping, API inspection, front-end 
 
 - Intercepts `window.fetch` in the page MAIN world at `document_start`.
 - Matches requests by URL wildcard, HTTP method, query parameters, request headers, and POST form fields.
+- Scopes rules to specific page hostnames, so only relevant rules are sent to a page hook.
 - Modifies JSON responses with ordered actions:
   - delete JSONPath target
   - replace JSONPath target
@@ -44,6 +45,7 @@ Chrome extensions cannot directly access page JavaScript objects from an isolate
 2. `contentBridge`
    - Runs in the isolated extension world.
    - Reads settings from `chrome.storage.local`.
+   - Filters rules by the current page hostname.
    - Sends a reduced runtime settings object to the page hook.
    - Listens for storage changes and updates the page hook.
 
@@ -66,6 +68,7 @@ src/extension/
 
 src/core/
   matcher.ts             Request parsing and wildcard matching.
+  rule-scope.ts          Page hostname scope normalization and filtering.
   rule-index.ts          Precompiled runtime rule index.
   rule-engine.ts         Rule selection and response kind handling.
   modifier.ts            JSON/text action execution.
@@ -86,9 +89,10 @@ __tests__/
 
 ## Rule Model
 
-A rule has four important sections:
+A rule has these important sections:
 
 - `match`: request matching conditions.
+- `scope`: optional page hostname scope.
 - `responseType`: optional response body type override.
 - `actions`: ordered modifications applied to the response body.
 - metadata: id, name, enabled state, timestamps, and schema version.
@@ -101,6 +105,9 @@ Example:
   "id": "remove-ad-items",
   "name": "Remove ad items",
   "enabled": true,
+  "scope": {
+    "pageHosts": ["example.com", "*.example.com"]
+  },
   "match": {
     "url": "*://api.example.com/feed*",
     "method": "POST",
@@ -129,6 +136,20 @@ Example:
   "updatedAt": 1710000000000
 }
 ```
+
+## Page Host Scope
+
+`scope.pageHosts` controls which pages a rule can run on. It matches the current page hostname, not the fetch request URL.
+
+Supported patterns:
+
+```text
+*
+example.com
+*.example.com
+```
+
+Missing or empty scope keeps the legacy behavior and runs on all pages. `*.example.com` matches both `example.com` and subdomains such as `api.example.com`.
 
 ## Request Matching
 
@@ -282,6 +303,7 @@ Runs a regular expression replacement on text responses.
 ## Reliability Notes
 
 - The extension matches the request before reading the response body.
+- The isolated content bridge filters rules by page hostname before sending runtime settings to the MAIN-world page hook.
 - Response body parsing happens only when a matching rule has actions for the inferred response type.
 - `HEAD`, `204`, `205`, and `304` responses are not rewritten because they cannot carry a replacement body safely.
 - `content-length` and `content-encoding` are removed from rewritten responses to avoid stale metadata.
@@ -300,7 +322,7 @@ The extension currently declares:
 
 `<all_urls>` is required because the extension can be configured to intercept fetch calls on arbitrary pages. If you publish this extension publicly, consider moving to optional host permissions or limiting the default match scope.
 
-The page hook runs in the page MAIN world because it must patch `window.fetch`. This is a powerful technique with a natural tradeoff: page scripts share the same world. NeoFetchSpy sends only a reduced runtime settings object to the page hook and validates messages strictly, but rule matching logic in MAIN world should still be treated as page-visible.
+The page hook runs in the page MAIN world because it must patch `window.fetch`. This is a powerful technique with a natural tradeoff: page scripts share the same world. NeoFetchSpy sends only rules scoped to the current page and only as a reduced runtime settings object, and validates messages strictly, but rule matching logic in MAIN world should still be treated as page-visible.
 
 ## Development
 

@@ -62,11 +62,16 @@ export interface MatchCondition {
   postForm?: Record<string, string>;
 }
 
+export interface RuleScope {
+  pageHosts?: string[];
+}
+
 export interface Rule {
   schemaVersion: typeof RULE_SCHEMA_VERSION;
   id: string;
   name: string;
   enabled: boolean;
+  scope?: RuleScope;
   match: MatchCondition;
   responseType?: ResponseKind;
   actions: Action[];

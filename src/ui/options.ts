@@ -1,4 +1,5 @@
 import { createRule, generateRuleId, parseRulesImport, validateRule } from '../core/rule-schema';
+import { formatPageHostsText, parsePageHostsText } from '../core/rule-scope';
 import type {
   Action,
   FilterAction,
@@ -31,6 +32,7 @@ type StatusMessage =
 
 type FieldSize =
   | 'name'
+  | 'page-hosts'
   | 'url'
   | 'path'
   | 'field-path'
@@ -210,6 +212,10 @@ function renderBasicSection(rule: Rule): HTMLElement {
   fields.appendChild(textField(t('ruleName'), rule.name, (value) => {
     rule.name = value;
   }, t('placeholderRuleName'), 'name'));
+  fields.appendChild(textField(t('pageHosts'), formatPageHostsText(rule.scope?.pageHosts), (value) => {
+    const pageHosts = parsePageHostsText(value);
+    rule.scope = pageHosts ? { pageHosts } : undefined;
+  }, t('placeholderPageHosts'), 'page-hosts'));
 
   const responseRow = createElement('div', { className: 'nfs-field nfs-field-response' });
   responseRow.appendChild(createElement('label', { text: t('responseType') }));
@@ -661,7 +667,9 @@ function filteredRules(): Rule[] {
   const query = searchText.trim().toLowerCase();
   if (!query) return settings.rules;
   return settings.rules.filter((rule) =>
-    rule.name.toLowerCase().includes(query) || rule.match.url.toLowerCase().includes(query),
+    rule.name.toLowerCase().includes(query)
+      || rule.match.url.toLowerCase().includes(query)
+      || (rule.scope?.pageHosts?.some((host) => host.toLowerCase().includes(query)) ?? false),
   );
 }
 

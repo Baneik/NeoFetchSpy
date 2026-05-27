@@ -1,4 +1,5 @@
 import { normalizeSettings, toPageRuntimeSettings } from '../core/rule-schema';
+import type { RuntimeSettings } from '../core/types';
 import {
   MESSAGE_CHANNEL,
   MESSAGE_SOURCE_BRIDGE,
@@ -23,12 +24,16 @@ window.addEventListener('message', (event: MessageEvent<unknown>) => {
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local' || !changes[SETTINGS_STORAGE_KEY]) return;
-  const nextSettings = toPageRuntimeSettings(normalizeSettings(changes[SETTINGS_STORAGE_KEY].newValue));
+  const nextSettings = toScopedPageRuntimeSettings(normalizeSettings(changes[SETTINGS_STORAGE_KEY].newValue));
   schedulePostSettings(nextSettings);
 });
 
 async function postCurrentSettings(): Promise<void> {
-  schedulePostSettings(toPageRuntimeSettings(await loadSettings()));
+  schedulePostSettings(toScopedPageRuntimeSettings(await loadSettings()));
+}
+
+function toScopedPageRuntimeSettings(settings: RuntimeSettings): SettingsMessage['settings'] {
+  return toPageRuntimeSettings(settings, window.location.hostname);
 }
 
 function schedulePostSettings(settings: SettingsMessage['settings']): void {

@@ -10,6 +10,7 @@ import {
   type RuntimeRule,
   type RuntimeSettings,
 } from './types';
+import { filterRulesForPageHost, normalizeRuleScope } from './rule-scope';
 
 const HTTP_METHODS = new Set<HttpMethod>([
   'GET',
@@ -74,6 +75,7 @@ export function createRule(overrides: Partial<Rule> = {}): Rule {
     id: overrides.id ?? generateRuleId(createdAt),
     name: overrides.name ?? '新规则',
     enabled: overrides.enabled ?? true,
+    scope: normalizeRuleScope(overrides.scope),
     match: {
       url: overrides.match?.url ?? '*://example.com/*',
       method: overrides.match?.method ?? '*',
@@ -111,12 +113,19 @@ export function normalizeSettings(input: unknown): RuntimeSettings {
   };
 }
 
-export function toPageRuntimeSettings(settings: RuntimeSettings): PageRuntimeSettings {
+export function toPageRuntimeSettings(
+  settings: RuntimeSettings,
+  pageHost?: string,
+): PageRuntimeSettings {
+  const scopedRules = pageHost === undefined
+    ? settings.rules
+    : filterRulesForPageHost(settings.rules, pageHost);
+
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     enabled: settings.enabled,
     debug: settings.debug,
-    rules: settings.rules.map(toRuntimeRule),
+    rules: scopedRules.map(toRuntimeRule),
   };
 }
 
@@ -174,6 +183,7 @@ export function normalizeRule(input: unknown): Rule | null {
     id: typeof input.id === 'string' && input.id ? input.id : generateRuleId(createdAt),
     name: typeof input.name === 'string' ? input.name : '未命名规则',
     enabled: typeof input.enabled === 'boolean' ? input.enabled : true,
+    scope: normalizeRuleScope(input.scope),
     match: {
       url: typeof input.match.url === 'string' ? input.match.url : '',
       method,

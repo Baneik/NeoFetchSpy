@@ -13,7 +13,11 @@ describe('extension messages', () => {
   it('accepts strict runtime settings messages only', () => {
     const settings = toPageRuntimeSettings({
       ...DEFAULT_SETTINGS,
-      rules: [createRule({ id: 'r1', name: 'private name' })],
+      rules: [createRule({
+        id: 'r1',
+        name: 'private name',
+        scope: { pageHosts: ['example.com'] },
+      })],
     });
     const message = {
       channel: MESSAGE_CHANNEL,
@@ -25,6 +29,7 @@ describe('extension messages', () => {
 
     expect(isSettingsMessage(message)).toBe(true);
     expect('name' in message.settings.rules[0]).toBe(false);
+    expect('scope' in message.settings.rules[0]).toBe(false);
     expect(isSettingsMessage({ ...message, version: 0 })).toBe(false);
     expect(isSettingsMessage({ ...message, source: MESSAGE_SOURCE_PAGE })).toBe(false);
     expect(isSettingsMessage({
