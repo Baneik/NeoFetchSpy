@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "NeoFetchSPY"
+  },
+  "extensionDescription": {
+    "message": "設定可能なルールでページの fetch レスポンスをインターセプトして変更します。"
+  },
+  "actionTitle": {
+    "message": "NeoFetchSPY"
+  }
+}

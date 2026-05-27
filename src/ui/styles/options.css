@@ -1,0 +1,705 @@
+:root {
+  color-scheme: light;
+  --nfs-bg: #f3f6f6;
+  --nfs-panel: #ffffff;
+  --nfs-panel-strong: #f7f9f9;
+  --nfs-text: #172126;
+  --nfs-muted: #66747b;
+  --nfs-border: #d8e0e3;
+  --nfs-border-strong: #c4d0d4;
+  --nfs-accent: #0f766e;
+  --nfs-accent-strong: #115e59;
+  --nfs-danger: #c2410c;
+  --nfs-danger-soft: #fff2ed;
+  --nfs-shadow: 0 1px 3px rgba(23, 33, 38, 0.05);
+  --nfs-shadow-raised: 0 4px 14px rgba(23, 33, 38, 0.07);
+  --nfs-radius: 8px;
+  --nfs-control-height: 36px;
+  --nfs-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--nfs-bg);
+  color: var(--nfs-text);
+  font-family: var(--nfs-font);
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(15, 118, 110, 0.25);
+  outline-offset: 1px;
+}
+
+.nfs-shell {
+  display: grid;
+  grid-template-columns: 288px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.nfs-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-right: 1px solid var(--nfs-border);
+  background: #edf3f4;
+}
+
+.nfs-brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.nfs-brand-mark {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--nfs-accent);
+  color: #fff;
+  font-weight: 800;
+}
+
+.nfs-brand h1 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.nfs-editor-header h2,
+.nfs-editor-empty h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.nfs-brand p,
+.nfs-editor-header p {
+  margin: 4px 0 0;
+  color: var(--nfs-muted);
+  font-size: 12px;
+}
+
+.nfs-global,
+.nfs-inline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nfs-global {
+  padding: 10px 12px;
+  border: 1px solid var(--nfs-border);
+  border-radius: var(--nfs-radius);
+  background: var(--nfs-panel);
+  font-size: 13px;
+}
+
+.nfs-language {
+  display: grid;
+  gap: 6px;
+  color: var(--nfs-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.nfs-language select {
+  width: 100%;
+  height: var(--nfs-control-height);
+  padding: 0 10px;
+  border: 1px solid var(--nfs-border);
+  border-radius: var(--nfs-radius);
+  background: var(--nfs-panel);
+  color: var(--nfs-text);
+  font-weight: 500;
+}
+
+.nfs-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nfs-tools .nfs-btn {
+  min-width: 0;
+  padding: 0 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+html[lang="ja"] .nfs-tools .nfs-btn {
+  font-size: 11px;
+}
+
+.nfs-search {
+  width: 100%;
+  height: var(--nfs-control-height);
+  padding: 0 12px;
+  border: 1px solid var(--nfs-border);
+  border-radius: var(--nfs-radius);
+  background: var(--nfs-panel);
+  color: var(--nfs-text);
+}
+
+.nfs-rule-list {
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.nfs-rule-item {
+  width: 100%;
+  display: block;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--nfs-radius);
+  background: rgba(255, 255, 255, 0.7);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nfs-rule-item:hover,
+.nfs-rule-item.is-selected {
+  border-color: rgba(15, 118, 110, 0.35);
+  background: #fff;
+}
+
+.nfs-rule-item.is-selected {
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
+}
+
+.nfs-rule-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.nfs-rule-item strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.nfs-rule-item code,
+.nfs-popup-rule code {
+  display: block;
+  overflow: hidden;
+  color: var(--nfs-muted);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nfs-pill {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #dce3e6;
+  color: #5a666c;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.nfs-pill.is-on {
+  background: #d9f3ea;
+  color: var(--nfs-accent-strong);
+}
+
+.nfs-sidebar-footer,
+.nfs-empty,
+.nfs-kv-empty {
+  color: var(--nfs-muted);
+  font-size: 12px;
+}
+
+.nfs-editor-pane {
+  min-width: 0;
+  padding: 18px 20px 24px;
+}
+
+.nfs-editor-content,
+.nfs-editor-empty {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+}
+
+.nfs-editor-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--nfs-border);
+  border-radius: var(--nfs-radius);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--nfs-shadow-raised);
+  backdrop-filter: blur(10px);
+}
+
+.nfs-header-actions,
+.nfs-action-controls,
+.nfs-add-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.nfs-editor-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.nfs-section,
+.nfs-editor-empty {
+  border: 1px solid var(--nfs-border);
+  border-radius: var(--nfs-radius);
+  background: var(--nfs-panel);
+  box-shadow: var(--nfs-shadow);
+}
+
+.nfs-section {
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px 16px;
+}
+
+.nfs-section h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nfs-section:not(.nfs-section-actions) h3 {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #edf1f2;
+}
+
+.nfs-section-actions {
+  padding: 3px 0 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.nfs-editor-empty {
+  min-height: calc(100vh - 36px);
+  display: grid;
+  place-content: center;
+  gap: 16px;
+}
+
+.nfs-field {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.nfs-field label,
+.nfs-kv-heading label,
+.nfs-kv-cell span {
+  color: var(--nfs-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nfs-field input,
+.nfs-field select,
+.nfs-field textarea,
+.nfs-kv-row input,
+.nfs-action-controls select {
+  width: 100%;
+  min-height: var(--nfs-control-height);
+  padding: 7px 10px;
+  border: 1px solid var(--nfs-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--nfs-text);
+  font-size: 14px;
+}
+
+.nfs-field input:hover,
+.nfs-field select:hover,
+.nfs-field textarea:hover,
+.nfs-kv-row input:hover,
+.nfs-action-controls select:hover {
+  border-color: var(--nfs-border-strong);
+}
+
+.nfs-field input:focus,
+.nfs-field select:focus,
+.nfs-field textarea:focus,
+.nfs-kv-row input:focus,
+.nfs-action-controls select:focus {
+  border-color: var(--nfs-accent);
+  outline: none;
+}
+
+.nfs-field textarea {
+  min-height: 68px;
+  resize: vertical;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.nfs-basic-fields,
+.nfs-match-primary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px 18px;
+}
+
+.nfs-field-name {
+  flex: 0 1 26rem;
+  width: min(100%, 26rem);
+}
+
+.nfs-field-response {
+  flex: 0 0 10rem;
+  width: 10rem;
+}
+
+.nfs-basic-debug {
+  flex: 0 0 11.5rem;
+  height: var(--nfs-control-height);
+  margin-bottom: 1px;
+  padding: 0 2px;
+  font-size: 13px;
+}
+
+.nfs-field-url {
+  flex: 1 1 34rem;
+  max-width: 48rem;
+}
+
+.nfs-field-method {
+  flex: 0 0 10rem;
+  width: 10rem;
+}
+
+.nfs-kv {
+  display: grid;
+  gap: 7px;
+  max-width: 47rem;
+}
+
+.nfs-kv-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nfs-kv-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 14rem) minmax(12rem, 24rem) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.nfs-kv-cell {
+  display: grid;
+  gap: 5px;
+}
+
+.nfs-action-card {
+  display: grid;
+  gap: 12px;
+  padding: 13px 14px 14px;
+  border: 1px solid var(--nfs-border);
+  border-radius: var(--nfs-radius);
+  background: var(--nfs-panel-strong);
+}
+
+.nfs-action-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.nfs-action-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 12px;
+}
+
+.nfs-action-controls .nfs-action-type {
+  width: 12rem;
+}
+
+.nfs-field-path {
+  flex: 0 1 18rem;
+  width: min(100%, 18rem);
+}
+
+.nfs-field-field-path {
+  flex: 1 1 22rem;
+  max-width: 34rem;
+}
+
+.nfs-field-operator {
+  flex: 0 0 12rem;
+  width: 12rem;
+}
+
+.nfs-field-json-value {
+  flex: 0 1 22rem;
+  width: min(100%, 22rem);
+}
+
+.nfs-field-json-value textarea {
+  height: var(--nfs-control-height);
+  min-height: var(--nfs-control-height);
+}
+
+.nfs-field-replacement {
+  flex: 1 1 25rem;
+  max-width: 36rem;
+}
+
+.nfs-field-pattern {
+  flex: 1 1 32rem;
+  max-width: 48rem;
+}
+
+.nfs-field-flags {
+  flex: 0 0 6rem;
+  width: 6rem;
+}
+
+.nfs-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.nfs-btn {
+  min-height: 33px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nfs-btn-primary {
+  background: var(--nfs-accent);
+  color: #fff;
+}
+
+.nfs-btn-primary:hover {
+  background: var(--nfs-accent-strong);
+}
+
+.nfs-btn-secondary {
+  border-color: var(--nfs-border);
+  background: #fff;
+  color: var(--nfs-text);
+}
+
+.nfs-btn-danger {
+  background: var(--nfs-danger);
+  color: #fff;
+}
+
+.nfs-btn-ghost,
+.nfs-btn-danger-ghost {
+  background: transparent;
+  color: var(--nfs-muted);
+}
+
+.nfs-btn-danger-ghost {
+  color: var(--nfs-danger);
+}
+
+.nfs-switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+
+.nfs-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nfs-switch span {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #cad5d8;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.nfs-switch span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+  transition: transform 0.18s ease;
+}
+
+.nfs-switch input:checked + span {
+  background: var(--nfs-accent);
+}
+
+.nfs-switch input:checked + span::after {
+  transform: translateX(18px);
+}
+
+@media (max-width: 1040px) {
+  .nfs-shell {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .nfs-sidebar {
+    padding: 14px 12px;
+  }
+
+  .nfs-editor-pane {
+    padding: 14px;
+  }
+
+  .nfs-editor-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .nfs-field-url {
+    max-width: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .nfs-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .nfs-sidebar {
+    position: static;
+    height: auto;
+    padding: 14px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--nfs-border);
+  }
+
+  .nfs-rule-list {
+    max-height: 220px;
+  }
+
+  .nfs-editor-pane {
+    padding: 12px;
+  }
+
+  .nfs-editor-empty {
+    min-height: 300px;
+  }
+
+  .nfs-action-top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .nfs-basic-fields,
+  .nfs-match-primary,
+  .nfs-action-body {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nfs-field-name,
+  .nfs-field-response,
+  .nfs-basic-debug,
+  .nfs-field-url,
+  .nfs-field-method,
+  .nfs-field-path,
+  .nfs-field-field-path,
+  .nfs-field-operator,
+  .nfs-field-json-value,
+  .nfs-field-replacement,
+  .nfs-field-pattern,
+  .nfs-field-flags {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: none;
+  }
+
+  .nfs-action-controls {
+    width: 100%;
+  }
+
+  .nfs-action-controls .nfs-action-type {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .nfs-kv-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .nfs-section {
+    padding: 13px 12px 14px;
+  }
+
+  .nfs-section-actions {
+    padding: 3px 0 0;
+  }
+
+  .nfs-action-card {
+    padding: 12px;
+  }
+
+  .nfs-header-actions {
+    gap: 6px;
+  }
+}

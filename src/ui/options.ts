@@ -1,0 +1,707 @@
+import { createRule, generateRuleId, parseRulesImport, validateRule } from '../core/rule-schema';
+import type {
+  Action,
+  FilterAction,
+  RegexAction,
+  ReplaceAction,
+  Rule,
+  RuntimeSettings,
+} from '../core/types';
+import { loadSettings, saveSettings } from '../extension/storage';
+import {
+  getLanguagePreference,
+  getLocale,
+  initializeI18n,
+  languageOptions,
+  setLanguagePreference,
+  t,
+  translateValidationError,
+  type LanguagePreference,
+  type TranslationKey,
+  type TranslationValues,
+} from './i18n';
+import { createElement, downloadText, formatDate } from './shared';
+import './styles/options.css';
+
+const root = document.getElementById('options-root');
+
+type StatusMessage =
+  | { key: TranslationKey; values?: TranslationValues }
+  | { validationErrors: string[] };
+
+type FieldSize =
+  | 'name'
+  | 'url'
+  | 'path'
+  | 'field-path'
+  | 'operator'
+  | 'json-value'
+  | 'replacement'
+  | 'pattern'
+  | 'flags';
+
+let settings: RuntimeSettings;
+let selectedRuleId: string | null = null;
+let searchText = '';
+let statusMessage: StatusMessage | null = null;
+
+void init();
+
+async function init(): Promise<void> {
+  if (!root) return;
+  const [loadedSettings] = await Promise.all([loadSettings(), initializeI18n()]);
+  settings = loadedSettings;
+  selectedRuleId = settings.rules[0]?.id ?? null;
+  render();
+}
+
+function render(): void {
+  if (!root) return;
+  root.innerHTML = '';
+  document.title = t('optionsTitle');
+
+  const shell = createElement('section', { className: 'nfs-shell' });
+  shell.appendChild(renderSidebar());
+  shell.appendChild(renderEditorPane());
+  root.appendChild(shell);
+}
+
+function renderSidebar(): HTMLElement {
+  const sidebar = createElement('aside', { className: 'nfs-sidebar' });
+
+  const brand = createElement('div', { className: 'nfs-brand' });
+  brand.appendChild(createElement('div', { className: 'nfs-brand-mark', text: 'N' }));
+  const brandText = createElement('div');
+  brandText.appendChild(createElement('h1', { text: 'NeoFetchSPY' }));
+  brandText.appendChild(createElement('p', {
+    text: t('enabledCount', { active: activeRuleCount(), total: settings.rules.length }),
+  }));
+  brand.appendChild(brandText);
+
+  const globalRow = createElement('div', { className: 'nfs-global' });
+  globalRow.appendChild(createElement('span', { text: t('globalEnabled') }));
+  globalRow.appendChild(createSwitch(settings.enabled, t('switchGlobalAria'), async (enabled) => {
+    settings.enabled = enabled;
+    await persist('globalStatusUpdated');
+  }));
+
+  const tools = createElement('div', { className: 'nfs-tools' });
+  const addBtn = button(t('new'), 'primary', () => {
+    const rule = createEmptyRule();
+    settings.rules.unshift(rule);
+    selectedRuleId = rule.id;
+    void persist('ruleCreated');
+  });
+  const importBtn = button(t('import'), 'secondary', importRules);
+  const exportBtn = button(t('export'), 'secondary', exportRules);
+  tools.append(addBtn, importBtn, exportBtn);
+
+  const search = createElement('input', {
+    className: 'nfs-search',
+    attrs: {
+      type: 'search',
+      placeholder: t('searchRules'),
+      value: searchText,
+    },
+  });
+  search.addEventListener('input', () => {
+    searchText = search.value;
+    render();
+  });
+
+  const list = createElement('div', { className: 'nfs-rule-list' });
+  const rules = filteredRules();
+
+  if (rules.length === 0) {
+    list.appendChild(createElement('div', { className: 'nfs-empty', text: t('noMatchingRules') }));
+  } else {
+    for (const rule of rules) {
+      list.appendChild(renderRuleListItem(rule));
+    }
+  }
+
+  const footer = createElement('div', { className: 'nfs-sidebar-footer' });
+  footer.textContent = renderedStatusMessage();
+
+  sidebar.append(brand, renderLanguageField(), globalRow, tools, search, list, footer);
+  return sidebar;
+}
+
+function renderLanguageField(): HTMLElement {
+  const field = createElement('label', { className: 'nfs-language' });
+  field.appendChild(createElement('span', { text: t('language') }));
+  const select = createSelect(languageOptions(), getLanguagePreference(), (value) => {
+    void setLanguagePreference(value as LanguagePreference).then(() => render());
+  });
+  select.setAttribute('aria-label', t('language'));
+  field.appendChild(select);
+  return field;
+}
+
+function renderRuleListItem(rule: Rule): HTMLElement {
+  const item = createElement('button', {
+    className: `nfs-rule-item${rule.id === selectedRuleId ? ' is-selected' : ''}`,
+  });
+  item.type = 'button';
+  item.addEventListener('click', () => {
+    selectedRuleId = rule.id;
+    render();
+  });
+
+  const top = createElement('div', { className: 'nfs-rule-item-top' });
+  top.appendChild(createElement('strong', { text: rule.name || t('unnamedRule') }));
+  top.appendChild(createElement('span', {
+    className: rule.enabled ? 'nfs-pill is-on' : 'nfs-pill',
+    text: rule.enabled ? 'ON' : 'OFF',
+  }));
+
+  item.appendChild(top);
+  item.appendChild(createElement('code', { text: rule.match.url }));
+  return item;
+}
+
+function renderEditorPane(): HTMLElement {
+  const pane = createElement('main', { className: 'nfs-editor-pane' });
+  const rule = selectedRule();
+
+  if (!rule) {
+    const empty = createElement('div', { className: 'nfs-editor-empty' });
+    empty.appendChild(createElement('h2', { text: t('chooseOrCreateRule') }));
+    empty.appendChild(button(t('newRule'), 'primary', () => {
+      const next = createEmptyRule();
+      settings.rules.unshift(next);
+      selectedRuleId = next.id;
+      void persist('ruleCreated');
+    }));
+    pane.appendChild(empty);
+    return pane;
+  }
+
+  const header = createElement('header', { className: 'nfs-editor-header' });
+  const titleBlock = createElement('div');
+  titleBlock.appendChild(createElement('h2', { text: rule.name || t('unnamedRule') }));
+  titleBlock.appendChild(createElement('p', { text: `ID ${rule.id}` }));
+
+  const headerActions = createElement('div', { className: 'nfs-header-actions' });
+  headerActions.appendChild(createSwitch(rule.enabled, t('switchRuleAria'), (enabled) => {
+    rule.enabled = enabled;
+    void persist('ruleStatusUpdated');
+  }));
+  headerActions.appendChild(button(t('duplicate'), 'secondary', () => duplicateRule(rule)));
+  headerActions.appendChild(button(t('delete'), 'danger', () => deleteRule(rule)));
+  headerActions.appendChild(button(t('save'), 'primary', () => saveCurrentRule(rule)));
+
+  header.append(titleBlock, headerActions);
+
+  const body = createElement('div', { className: 'nfs-editor-body' });
+  body.appendChild(renderBasicSection(rule));
+  body.appendChild(renderMatchSection(rule));
+  body.appendChild(renderActionsSection(rule));
+
+  const content = createElement('div', { className: 'nfs-editor-content' });
+  content.append(header, body);
+  pane.appendChild(content);
+  return pane;
+}
+
+function renderBasicSection(rule: Rule): HTMLElement {
+  const section = sectionCard(t('basic'), 'nfs-section-basic');
+  const fields = createElement('div', { className: 'nfs-basic-fields' });
+  fields.appendChild(textField(t('ruleName'), rule.name, (value) => {
+    rule.name = value;
+  }, t('placeholderRuleName'), 'name'));
+
+  const responseRow = createElement('div', { className: 'nfs-field nfs-field-response' });
+  responseRow.appendChild(createElement('label', { text: t('responseType') }));
+  const select = createSelect(
+    [
+      ['auto', t('automatic')],
+      ['json', 'JSON'],
+      ['text', 'Text'],
+    ],
+    rule.responseType ?? 'auto',
+    (value) => {
+      rule.responseType = value === 'json' || value === 'text' ? value : undefined;
+    },
+  );
+  responseRow.appendChild(select);
+  fields.appendChild(responseRow);
+
+  const debugRow = createElement('div', { className: 'nfs-inline-row nfs-basic-debug' });
+  debugRow.appendChild(createElement('span', { text: t('debugLogs') }));
+  debugRow.appendChild(createSwitch(settings.debug, t('switchDebugAria'), async (enabled) => {
+    settings.debug = enabled;
+    await persist('debugUpdated');
+  }));
+  fields.appendChild(debugRow);
+  section.appendChild(fields);
+  return section;
+}
+
+function renderMatchSection(rule: Rule): HTMLElement {
+  const section = sectionCard(t('match'), 'nfs-section-match');
+  const primaryFields = createElement('div', { className: 'nfs-match-primary' });
+  primaryFields.appendChild(textField(t('urlWildcard'), rule.match.url, (value) => {
+    rule.match.url = value;
+  }, t('placeholderUrlWildcard'), 'url'));
+
+  const methodField = createElement('div', { className: 'nfs-field nfs-field-method' });
+  methodField.appendChild(createElement('label', { text: 'HTTP Method' }));
+  methodField.appendChild(createSelect(
+    ['*', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'].map((method) => [method, method]),
+    rule.match.method ?? '*',
+    (value) => {
+      rule.match.method = value as Rule['match']['method'];
+    },
+  ));
+  primaryFields.appendChild(methodField);
+  section.appendChild(primaryFields);
+
+  section.appendChild(keyValueEditor(t('queryParameters'), rule.match.query ?? {}, (next) => {
+    rule.match.query = Object.keys(next).length ? next : undefined;
+  }));
+  section.appendChild(keyValueEditor(t('postFormParameters'), rule.match.postForm ?? {}, (next) => {
+    rule.match.postForm = Object.keys(next).length ? next : undefined;
+  }));
+  section.appendChild(keyValueEditor('Headers', rule.match.headers ?? {}, (next) => {
+    rule.match.headers = Object.keys(next).length ? next : undefined;
+  }));
+
+  return section;
+}
+
+function renderActionsSection(rule: Rule): HTMLElement {
+  const section = sectionCard(t('actions'), 'nfs-section-actions');
+  const list = createElement('div', { className: 'nfs-actions' });
+
+  rule.actions.forEach((action, index) => {
+    list.appendChild(renderActionEditor(rule, action, index));
+  });
+
+  const addRow = createElement('div', { className: 'nfs-add-action-row' });
+  addRow.appendChild(button(t('addJsonFilter'), 'secondary', () => addAction(rule, {
+    type: 'filter',
+    iterablePath: '',
+    condition: { field: '', operator: 'exists' },
+  })));
+  addRow.appendChild(button(t('addReplacement'), 'secondary', () => addAction(rule, {
+    type: 'replace',
+    path: '',
+    value: undefined,
+  })));
+  addRow.appendChild(button(t('addRegex'), 'secondary', () => addAction(rule, {
+    type: 'regex',
+    pattern: '',
+    flags: undefined,
+    replacement: '',
+  })));
+
+  section.append(list, addRow);
+  return section;
+}
+
+function renderActionEditor(rule: Rule, action: Action, index: number): HTMLElement {
+  const card = createElement('article', { className: 'nfs-action-card' });
+  const top = createElement('div', { className: 'nfs-action-top' });
+  top.appendChild(createElement('strong', { text: t('actionNumber', { index: index + 1 }) }));
+
+  const controls = createElement('div', { className: 'nfs-action-controls' });
+  const actionType = createSelect(
+    [
+      ['filter', t('filterAction')],
+      ['delete', t('deleteAction')],
+      ['replace', t('replaceAction')],
+      ['regex', t('regexAction')],
+    ],
+    action.type,
+    (value) => {
+      rule.actions[index] = defaultAction(value as Action['type']);
+      render();
+    },
+  );
+  actionType.className = 'nfs-action-type';
+  controls.appendChild(actionType);
+  controls.appendChild(button(t('moveUp'), 'ghost', () => moveAction(rule, index, -1)));
+  controls.appendChild(button(t('moveDown'), 'ghost', () => moveAction(rule, index, 1)));
+  controls.appendChild(button(t('remove'), 'danger-ghost', () => {
+    rule.actions.splice(index, 1);
+    render();
+  }));
+  top.appendChild(controls);
+
+  const body = createElement('div', { className: 'nfs-action-body' });
+  if (action.type === 'delete') {
+    body.appendChild(textField('JSONPath', action.path, (value) => {
+      action.path = value;
+    }, t('placeholderJsonPath'), 'path'));
+  }
+
+  if (action.type === 'replace') {
+    body.appendChild(textField('JSONPath', action.path, (value) => {
+      action.path = value;
+    }, t('placeholderJsonPath'), 'path'));
+    body.appendChild(jsonValueField(t('newValue'), action.value, (value) => {
+      (action as ReplaceAction).value = value;
+    }, 'json-value'));
+  }
+
+  if (action.type === 'filter') {
+    body.appendChild(textField(t('arrayPath'), action.iterablePath, (value) => {
+      (action as FilterAction).iterablePath = value;
+    }, t('placeholderArrayPath'), 'path'));
+    body.appendChild(textField(t('fieldPath'), action.condition.field, (value) => {
+      (action as FilterAction).condition.field = value;
+    }, t('placeholderFieldPath'), 'field-path'));
+
+    const operatorField = createElement('div', { className: 'nfs-field nfs-field-operator' });
+    operatorField.appendChild(createElement('label', { text: t('condition') }));
+    operatorField.appendChild(createSelect(
+      [
+        ['exists', t('exists')],
+        ['not_exists', t('notExists')],
+        ['non_empty', t('nonEmpty')],
+        ['empty', t('empty')],
+        ['equals', t('equals')],
+        ['not_equals', t('notEquals')],
+        ['regex', t('regexMatch')],
+      ],
+      action.condition.operator,
+      (value) => {
+        (action as FilterAction).condition.operator = value as FilterAction['condition']['operator'];
+        render();
+      },
+    ));
+    body.appendChild(operatorField);
+
+    if (['equals', 'not_equals', 'regex'].includes(action.condition.operator)) {
+      body.appendChild(jsonValueField(t('compareValue'), action.condition.value, (value) => {
+        (action as FilterAction).condition.value = value;
+      }, 'json-value'));
+    }
+  }
+
+  if (action.type === 'regex') {
+    body.appendChild(textField('Pattern', action.pattern, (value) => {
+      (action as RegexAction).pattern = value;
+    }, t('placeholderRegexPattern'), 'pattern'));
+    body.appendChild(textField('Flags', action.flags ?? '', (value) => {
+      (action as RegexAction).flags = value || undefined;
+    }, t('placeholderRegexFlags'), 'flags'));
+    body.appendChild(textareaField(t('replacement'), action.replacement, (value) => {
+      (action as RegexAction).replacement = value;
+    }, 'replacement', t('placeholderReplacement')));
+  }
+
+  card.append(top, body);
+  return card;
+}
+
+function keyValueEditor(
+  title: string,
+  values: Record<string, string>,
+  onChange: (next: Record<string, string>) => void,
+): HTMLElement {
+  const wrapper = createElement('div', { className: 'nfs-kv' });
+  const heading = createElement('div', { className: 'nfs-kv-heading' });
+  heading.appendChild(createElement('label', { text: title }));
+  heading.appendChild(button(t('add'), 'ghost', () => {
+    onChange({ ...values, '': '' });
+    render();
+  }));
+  wrapper.appendChild(heading);
+
+  const entries = Object.entries(values);
+  if (entries.length === 0) {
+    wrapper.appendChild(createElement('div', { className: 'nfs-kv-empty', text: t('notSet') }));
+    return wrapper;
+  }
+
+  entries.forEach(([key, value], index) => {
+    const row = createElement('div', { className: 'nfs-kv-row' });
+    const keyField = createElement('label', { className: 'nfs-kv-cell' });
+    keyField.appendChild(createElement('span', { text: t('entryKey') }));
+    const keyInput = createElement('input', { attrs: { value: key, placeholder: t('placeholderEntryKey') } });
+    const valueField = createElement('label', { className: 'nfs-kv-cell' });
+    valueField.appendChild(createElement('span', { text: t('entryValue') }));
+    const valueInput = createElement('input', { attrs: { value, placeholder: t('placeholderEntryValue') } });
+    const remove = button(t('remove'), 'ghost', () => {
+      const next = Object.fromEntries(entries.filter((_, i) => i !== index));
+      onChange(next);
+      render();
+    });
+
+    keyInput.addEventListener('input', () => {
+      const next = Object.fromEntries(entries);
+      delete next[key];
+      if (keyInput.value) next[keyInput.value] = valueInput.value;
+      onChange(next);
+    });
+    valueInput.addEventListener('input', () => {
+      const next = Object.fromEntries(entries);
+      if (key) next[key] = valueInput.value;
+      onChange(next);
+    });
+
+    keyField.appendChild(keyInput);
+    valueField.appendChild(valueInput);
+    row.append(keyField, valueField, remove);
+    wrapper.appendChild(row);
+  });
+
+  return wrapper;
+}
+
+function sectionCard(title: string, className = ''): HTMLElement {
+  const section = createElement('section', {
+    className: `nfs-section${className ? ` ${className}` : ''}`,
+  });
+  section.appendChild(createElement('h3', { text: title }));
+  return section;
+}
+
+function textField(
+  label: string,
+  value: string,
+  onInput: (value: string) => void,
+  placeholder = '',
+  size?: FieldSize,
+): HTMLElement {
+  const field = createElement('div', {
+    className: `nfs-field${size ? ` nfs-field-${size}` : ''}`,
+  });
+  field.appendChild(createElement('label', { text: label }));
+  const input = createElement('input', {
+    attrs: {
+      type: 'text',
+      value,
+      placeholder,
+    },
+  });
+  input.addEventListener('input', () => onInput(input.value));
+  field.appendChild(input);
+  return field;
+}
+
+function textareaField(
+  label: string,
+  value: string,
+  onInput: (value: string) => void,
+  size?: FieldSize,
+  placeholder = '',
+): HTMLElement {
+  const field = createElement('div', {
+    className: `nfs-field${size ? ` nfs-field-${size}` : ''}`,
+  });
+  field.appendChild(createElement('label', { text: label }));
+  const textarea = createElement('textarea');
+  textarea.value = value;
+  textarea.placeholder = placeholder;
+  textarea.addEventListener('input', () => onInput(textarea.value));
+  field.appendChild(textarea);
+  return field;
+}
+
+function jsonValueField(
+  label: string,
+  value: unknown,
+  onInput: (value: unknown) => void,
+  size?: FieldSize,
+): HTMLElement {
+  return textareaField(label, stringifyValue(value), (raw) => {
+    try {
+      onInput(JSON.parse(raw));
+    } catch {
+      onInput(raw);
+    }
+  }, size, t('placeholderJsonValue'));
+}
+
+function createSelect(
+  options: Array<[string, string]>,
+  value: string,
+  onChange: (value: string) => void,
+): HTMLSelectElement {
+  const select = createElement('select');
+  for (const [optionValue, label] of options) {
+    const option = createElement('option', {
+      text: label,
+      attrs: { value: optionValue },
+    });
+    option.selected = optionValue === value;
+    select.appendChild(option);
+  }
+  select.addEventListener('change', () => onChange(select.value));
+  return select;
+}
+
+function createSwitch(
+  checked: boolean,
+  accessibleName: string,
+  onChange: (checked: boolean) => void | Promise<void>,
+): HTMLElement {
+  const label = createElement('label', { className: 'nfs-switch' });
+  const input = createElement('input', { attrs: { type: 'checkbox', 'aria-label': accessibleName } });
+  input.checked = checked;
+  input.addEventListener('change', () => void onChange(input.checked));
+  label.append(input, createElement('span'));
+  return label;
+}
+
+function button(
+  text: string,
+  variant: 'primary' | 'secondary' | 'danger' | 'ghost' | 'danger-ghost',
+  onClick: () => void,
+): HTMLButtonElement {
+  const btn = createElement('button', {
+    className: `nfs-btn nfs-btn-${variant}`,
+    text,
+  });
+  btn.type = 'button';
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+async function saveCurrentRule(rule: Rule): Promise<void> {
+  rule.updatedAt = Date.now();
+  const validation = validateRule(rule);
+  if (!validation.valid) {
+    statusMessage = { validationErrors: validation.errors };
+    render();
+    return;
+  }
+  await persist('ruleSaved');
+}
+
+async function persist(key: TranslationKey, values?: TranslationValues): Promise<void> {
+  await saveSettings(settings);
+  settings = await loadSettings();
+  statusMessage = { key, values };
+  render();
+}
+
+function renderedStatusMessage(): string {
+  if (!statusMessage) {
+    return t('lastUpdated', { date: formatDate(settings.updatedAt, getLocale()) });
+  }
+  if ('validationErrors' in statusMessage) {
+    const separator = getLocale() === 'en' ? '; ' : '；';
+    return statusMessage.validationErrors.map(translateValidationError).join(separator);
+  }
+  return t(statusMessage.key, statusMessage.values);
+}
+
+function duplicateRule(rule: Rule): void {
+  const copy: Rule = {
+    ...structuredClone(rule),
+    id: generateRuleId(),
+    name: `${rule.name || t('unnamedRule')} ${t('ruleCopySuffix')}`,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  settings.rules.unshift(copy);
+  selectedRuleId = copy.id;
+  void persist('ruleCopied');
+}
+
+function deleteRule(rule: Rule): void {
+  if (!window.confirm(t('confirmDeleteRule', { name: rule.name || t('unnamedRule') }))) return;
+  settings.rules = settings.rules.filter((candidate) => candidate.id !== rule.id);
+  selectedRuleId = settings.rules[0]?.id ?? null;
+  void persist('ruleDeleted');
+}
+
+function addAction(rule: Rule, action: Action): void {
+  rule.actions.push(action);
+  render();
+}
+
+function moveAction(rule: Rule, index: number, direction: -1 | 1): void {
+  const nextIndex = index + direction;
+  if (nextIndex < 0 || nextIndex >= rule.actions.length) return;
+  const [action] = rule.actions.splice(index, 1);
+  rule.actions.splice(nextIndex, 0, action);
+  render();
+}
+
+function defaultAction(type: Action['type']): Action {
+  if (type === 'delete') return { type, path: '' };
+  if (type === 'replace') return { type, path: '', value: undefined };
+  if (type === 'regex') return { type, pattern: '', flags: undefined, replacement: '' };
+  return {
+    type: 'filter',
+    iterablePath: '',
+    condition: { field: '', operator: 'exists' },
+  };
+}
+
+function createEmptyRule(): Rule {
+  return createRule({
+    name: '',
+    match: { url: '', method: '*' },
+    actions: [
+      {
+        type: 'filter',
+        iterablePath: '',
+        condition: { field: '', operator: 'exists' },
+      },
+    ],
+  });
+}
+
+function selectedRule(): Rule | null {
+  return settings.rules.find((rule) => rule.id === selectedRuleId) ?? null;
+}
+
+function activeRuleCount(): number {
+  return settings.rules.filter((rule) => rule.enabled).length;
+}
+
+function filteredRules(): Rule[] {
+  const query = searchText.trim().toLowerCase();
+  if (!query) return settings.rules;
+  return settings.rules.filter((rule) =>
+    rule.name.toLowerCase().includes(query) || rule.match.url.toLowerCase().includes(query),
+  );
+}
+
+function importRules(): void {
+  const input = createElement('input', {
+    attrs: {
+      type: 'file',
+      accept: '.json,application/json',
+    },
+  });
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      const result = parseRulesImport(String(reader.result ?? ''));
+      const existingIds = new Set(settings.rules.map((rule) => rule.id));
+      for (const rule of result.rules) {
+        if (existingIds.has(rule.id)) rule.id = generateRuleId();
+        existingIds.add(rule.id);
+      }
+      settings.rules = [...result.rules, ...settings.rules];
+      selectedRuleId = result.rules[0]?.id ?? selectedRuleId;
+      void persist(
+        result.errors.length ? 'importFinishedWithFailures' : 'rulesImported',
+        result.errors.length ? { count: result.errors.length } : undefined,
+      );
+    });
+    reader.readAsText(file);
+  });
+  input.click();
+}
+
+function exportRules(): void {
+  downloadText('neofetchspy-rules.json', JSON.stringify(settings.rules, null, 2));
+  statusMessage = { key: 'rulesExported' };
+  render();
+}
+
+function stringifyValue(value: unknown): string {
+  if (value === undefined) return '';
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value, null, 2);
+}

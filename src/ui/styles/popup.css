@@ -1,0 +1,167 @@
+:root {
+  color-scheme: light;
+  --nfs-bg: #f5f7f8;
+  --nfs-panel: #ffffff;
+  --nfs-text: #172126;
+  --nfs-muted: #66747b;
+  --nfs-border: #d8e0e3;
+  --nfs-accent: #0f766e;
+  --nfs-accent-strong: #115e59;
+  --nfs-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 340px;
+  margin: 0;
+  background: var(--nfs-bg);
+  color: var(--nfs-text);
+  font-family: var(--nfs-font);
+  letter-spacing: 0;
+}
+
+.nfs-popup {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.nfs-popup header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nfs-popup h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.nfs-popup p {
+  margin: 3px 0 0;
+  color: var(--nfs-muted);
+  font-size: 12px;
+}
+
+.nfs-popup-language {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: var(--nfs-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.nfs-popup-language select {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--nfs-border);
+  border-radius: 6px;
+  background: var(--nfs-panel);
+  color: var(--nfs-text);
+  font: inherit;
+  font-weight: 500;
+}
+
+.nfs-popup-rules {
+  display: grid;
+  gap: 8px;
+}
+
+.nfs-popup-rule,
+.nfs-popup-empty {
+  padding: 10px;
+  border: 1px solid var(--nfs-border);
+  border-radius: 8px;
+  background: var(--nfs-panel);
+}
+
+.nfs-popup-rule strong {
+  display: block;
+  overflow: hidden;
+  margin-bottom: 5px;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nfs-popup-rule code {
+  display: block;
+  overflow: hidden;
+  color: var(--nfs-muted);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nfs-popup-empty {
+  color: var(--nfs-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.nfs-popup-primary {
+  width: 100%;
+  height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--nfs-accent);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.nfs-popup-primary:hover {
+  background: var(--nfs-accent-strong);
+}
+
+.nfs-popup-switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+
+.nfs-popup-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nfs-popup-switch span {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #cad5d8;
+  cursor: pointer;
+}
+
+.nfs-popup-switch span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+  transition: transform 0.18s ease;
+}
+
+.nfs-popup-switch input:checked + span {
+  background: var(--nfs-accent);
+}
+
+.nfs-popup-switch input:checked + span::after {
+  transform: translateX(18px);
+}
