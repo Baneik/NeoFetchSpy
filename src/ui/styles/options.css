@@ -67,25 +67,24 @@ textarea:focus-visible {
 
 .nfs-brand {
   display: flex;
-  gap: 12px;
   align-items: center;
-}
-
-.nfs-brand-mark {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--nfs-accent);
-  color: #fff;
-  font-weight: 800;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .nfs-brand h1 {
   margin: 0;
   font-size: 17px;
   line-height: 1.2;
+}
+
+.nfs-brand a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.nfs-brand a:hover {
+  color: var(--nfs-accent-strong);
 }
 
 .nfs-editor-header h2,
@@ -95,7 +94,6 @@ textarea:focus-visible {
   line-height: 1.25;
 }
 
-.nfs-brand p,
 .nfs-editor-header p {
   margin: 4px 0 0;
   color: var(--nfs-muted);
@@ -116,25 +114,6 @@ textarea:focus-visible {
   border-radius: var(--nfs-radius);
   background: var(--nfs-panel);
   font-size: 13px;
-}
-
-.nfs-language {
-  display: grid;
-  gap: 6px;
-  color: var(--nfs-muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.nfs-language select {
-  width: 100%;
-  height: var(--nfs-control-height);
-  padding: 0 10px;
-  border: 1px solid var(--nfs-border);
-  border-radius: var(--nfs-radius);
-  background: var(--nfs-panel);
-  color: var(--nfs-text);
-  font-weight: 500;
 }
 
 .nfs-tools {
@@ -287,6 +266,10 @@ html[lang="ja"] .nfs-tools .nfs-btn {
   margin-top: 12px;
 }
 
+.nfs-settings-body {
+  justify-items: start;
+}
+
 .nfs-section,
 .nfs-editor-empty {
   border: 1px solid var(--nfs-border);
@@ -317,6 +300,20 @@ html[lang="ja"] .nfs-tools .nfs-btn {
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.nfs-section-settings {
+  width: 100%;
+}
+
+.nfs-settings-fields {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 22rem);
+}
+
+.nfs-settings-field {
+  width: 100%;
 }
 
 .nfs-editor-empty {
@@ -555,6 +552,32 @@ html[lang="ja"] .nfs-tools .nfs-btn {
 
 .nfs-btn-danger-ghost {
   color: var(--nfs-danger);
+}
+
+.nfs-icon-btn {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--nfs-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--nfs-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.nfs-icon-btn:hover,
+.nfs-icon-btn.is-active {
+  border-color: rgba(15, 118, 110, 0.35);
+  background: #fff;
+  color: var(--nfs-accent-strong);
+}
+
+.nfs-icon-btn.is-active {
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
 }
 
 .nfs-switch {

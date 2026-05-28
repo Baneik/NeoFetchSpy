@@ -26,10 +26,13 @@ import { createElement, downloadText, formatDate } from './shared';
 import './styles/options.css';
 
 const root = document.getElementById('options-root');
+const REPOSITORY_URL = 'https://github.com/Baneik/NeoFetchSpy';
 
 type StatusMessage =
   | { key: TranslationKey; values?: TranslationValues }
   | { validationErrors: string[] };
+
+type ActivePane = 'rule' | 'settings';
 
 type FieldSize =
   | 'name'
@@ -45,6 +48,7 @@ type FieldSize =
 
 let settings: RuntimeSettings;
 let selectedRuleId: string | null = null;
+let activePane: ActivePane = 'rule';
 let searchText = '';
 let statusMessage: StatusMessage | null = null;
 
@@ -73,13 +77,20 @@ function renderSidebar(): HTMLElement {
   const sidebar = createElement('aside', { className: 'nfs-sidebar' });
 
   const brand = createElement('div', { className: 'nfs-brand' });
-  brand.appendChild(createElement('div', { className: 'nfs-brand-mark', text: 'N' }));
-  const brandText = createElement('div');
-  brandText.appendChild(createElement('h1', { text: 'NeoFetchSPY' }));
-  brandText.appendChild(createElement('p', {
-    text: t('enabledCount', { active: activeRuleCount(), total: settings.rules.length }),
+  const title = createElement('h1');
+  title.appendChild(createElement('a', {
+    text: 'NeoFetchSPY',
+    attrs: {
+      href: REPOSITORY_URL,
+      target: '_blank',
+      rel: 'noreferrer',
+    },
   }));
-  brand.appendChild(brandText);
+  brand.appendChild(title);
+  brand.appendChild(iconButton('⚙', activePane === 'settings' ? t('closeSettings') : t('openSettings'), () => {
+    activePane = activePane === 'settings' ? 'rule' : 'settings';
+    render();
+  }, activePane === 'settings'));
 
   const globalRow = createElement('div', { className: 'nfs-global' });
   globalRow.appendChild(createElement('span', { text: t('globalEnabled') }));
@@ -91,6 +102,7 @@ function renderSidebar(): HTMLElement {
   const tools = createElement('div', { className: 'nfs-tools' });
   const addBtn = button(t('new'), 'primary', () => {
     const rule = createEmptyRule();
+    activePane = 'rule';
     settings.rules.unshift(rule);
     selectedRuleId = rule.id;
     void persist('ruleCreated');
@@ -126,13 +138,13 @@ function renderSidebar(): HTMLElement {
   const footer = createElement('div', { className: 'nfs-sidebar-footer' });
   footer.textContent = renderedStatusMessage();
 
-  sidebar.append(brand, renderLanguageField(), globalRow, tools, search, list, footer);
+  sidebar.append(brand, globalRow, tools, search, list, footer);
   return sidebar;
 }
 
 function renderLanguageField(): HTMLElement {
-  const field = createElement('label', { className: 'nfs-language' });
-  field.appendChild(createElement('span', { text: t('language') }));
+  const field = createElement('div', { className: 'nfs-field nfs-settings-field' });
+  field.appendChild(createElement('label', { text: t('language') }));
   const select = createSelect(languageOptions(), getLanguagePreference(), (value) => {
     void setLanguagePreference(value as LanguagePreference).then(() => render());
   });
@@ -147,6 +159,7 @@ function renderRuleListItem(rule: Rule): HTMLElement {
   });
   item.type = 'button';
   item.addEventListener('click', () => {
+    activePane = 'rule';
     selectedRuleId = rule.id;
     render();
   });
@@ -165,6 +178,8 @@ function renderRuleListItem(rule: Rule): HTMLElement {
 
 function renderEditorPane(): HTMLElement {
   const pane = createElement('main', { className: 'nfs-editor-pane' });
+  if (activePane === 'settings') return renderSettingsPane(pane);
+
   const rule = selectedRule();
 
   if (!rule) {
@@ -172,6 +187,7 @@ function renderEditorPane(): HTMLElement {
     empty.appendChild(createElement('h2', { text: t('chooseOrCreateRule') }));
     empty.appendChild(button(t('newRule'), 'primary', () => {
       const next = createEmptyRule();
+      activePane = 'rule';
       settings.rules.unshift(next);
       selectedRuleId = next.id;
       void persist('ruleCreated');
@@ -202,6 +218,26 @@ function renderEditorPane(): HTMLElement {
   body.appendChild(renderActionsSection(rule));
 
   const content = createElement('div', { className: 'nfs-editor-content' });
+  content.append(header, body);
+  pane.appendChild(content);
+  return pane;
+}
+
+function renderSettingsPane(pane: HTMLElement): HTMLElement {
+  const header = createElement('header', { className: 'nfs-editor-header' });
+  const titleBlock = createElement('div');
+  titleBlock.appendChild(createElement('h2', { text: t('settings') }));
+  header.appendChild(titleBlock);
+
+  const section = sectionCard(t('preferences'), 'nfs-section-settings');
+  const fields = createElement('div', { className: 'nfs-settings-fields' });
+  fields.appendChild(renderLanguageField());
+  section.appendChild(fields);
+
+  const body = createElement('div', { className: 'nfs-editor-body nfs-settings-body' });
+  body.appendChild(section);
+
+  const content = createElement('div', { className: 'nfs-editor-content nfs-settings-content' });
   content.append(header, body);
   pane.appendChild(content);
   return pane;
@@ -625,6 +661,26 @@ function button(
   return btn;
 }
 
+function iconButton(
+  text: string,
+  accessibleName: string,
+  onClick: () => void,
+  pressed = false,
+): HTMLButtonElement {
+  const btn = createElement('button', {
+    className: `nfs-icon-btn${pressed ? ' is-active' : ''}`,
+    text,
+    title: accessibleName,
+    attrs: {
+      'aria-label': accessibleName,
+      'aria-pressed': String(pressed),
+    },
+  });
+  btn.type = 'button';
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
 async function saveCurrentRule(rule: Rule): Promise<void> {
   rule.updatedAt = Date.now();
   const validation = validateRule(rule);
@@ -715,10 +771,6 @@ function createEmptyRule(): Rule {
 
 function selectedRule(): Rule | null {
   return settings.rules.find((rule) => rule.id === selectedRuleId) ?? null;
-}
-
-function activeRuleCount(): number {
-  return settings.rules.filter((rule) => rule.enabled).length;
 }
 
 function filteredRules(): Rule[] {
