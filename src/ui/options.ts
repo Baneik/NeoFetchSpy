@@ -11,6 +11,15 @@ import type {
 } from '../core/types';
 import { loadSettings, saveSettings } from '../extension/storage';
 import {
+  loadWebDavSyncSettings,
+  runWebDavSyncAction,
+  saveWebDavSyncSettings,
+  validateWebDavSyncSettings,
+  type WebDavSyncAction,
+  type WebDavSyncResult,
+  type WebDavSyncSettings,
+} from '../extension/webdav-sync';
+import {
   getLanguagePreference,
   getLocale,
   initializeI18n,
@@ -27,10 +36,12 @@ import './styles/options.css';
 
 const root = document.getElementById('options-root');
 const REPOSITORY_URL = 'https://github.com/Baneik/NeoFetchSpy';
+const WEBDAV_QUICK_CONFIG_FORMAT = 'neofetchspy-webdav-config';
 
 type StatusMessage =
   | { key: TranslationKey; values?: TranslationValues }
-  | { validationErrors: string[] };
+  | { validationErrors: string[] }
+  | { raw: string };
 
 type ActivePane = 'rule' | 'settings';
 
@@ -44,9 +55,14 @@ type FieldSize =
   | 'json-value'
   | 'replacement'
   | 'pattern'
-  | 'flags';
+  | 'flags'
+  | 'webdav-url'
+  | 'webdav-credential'
+  | 'webdav-quick-config';
 
 let settings: RuntimeSettings;
+let webDavSettings: WebDavSyncSettings;
+let webDavQuickConfigText = '';
 let selectedRuleId: string | null = null;
 let activePane: ActivePane = 'rule';
 let searchText = '';
@@ -56,8 +72,14 @@ void init();
 
 async function init(): Promise<void> {
   if (!root) return;
-  const [loadedSettings] = await Promise.all([loadSettings(), initializeI18n()]);
+  const [loadedSettings, loadedWebDavSettings] = await Promise.all([
+    loadSettings(),
+    loadWebDavSyncSettings(),
+    initializeI18n(),
+  ]);
   settings = loadedSettings;
+  webDavSettings = loadedWebDavSettings;
+  webDavQuickConfigText = webDavSettings.quickConfig;
   selectedRuleId = settings.rules[0]?.id ?? null;
   render();
 }
@@ -236,11 +258,72 @@ function renderSettingsPane(pane: HTMLElement): HTMLElement {
 
   const body = createElement('div', { className: 'nfs-editor-body nfs-settings-body' });
   body.appendChild(section);
+  body.appendChild(renderWebDavSection());
 
   const content = createElement('div', { className: 'nfs-editor-content nfs-settings-content' });
   content.append(header, body);
   pane.appendChild(content);
   return pane;
+}
+
+function renderWebDavSection(): HTMLElement {
+  const section = sectionCard(t('webDavSync'), 'nfs-section-webdav');
+  const grid = createElement('div', { className: 'nfs-webdav-grid' });
+
+  const enabledRow = createElement('div', { className: 'nfs-inline-row nfs-webdav-switch' });
+  enabledRow.appendChild(createElement('span', { text: t('webDavEnabled') }));
+  enabledRow.appendChild(createSwitch(webDavSettings.enabled, t('webDavEnabled'), (enabled) => {
+    webDavSettings.enabled = enabled;
+    clearWebDavQuickConfig();
+    void persistWebDavSettings('webDavSettingsSaved');
+  }));
+
+  const autoRow = createElement('div', { className: 'nfs-inline-row nfs-webdav-switch' });
+  autoRow.appendChild(createElement('span', { text: t('webDavAutoSync') }));
+  autoRow.appendChild(createSwitch(webDavSettings.autoSync, t('webDavAutoSync'), (enabled) => {
+    webDavSettings.autoSync = enabled;
+    clearWebDavQuickConfig();
+    void persistWebDavSettings('webDavSettingsSaved');
+  }));
+
+  grid.appendChild(enabledRow);
+  grid.appendChild(autoRow);
+  grid.appendChild(textField(t('webDavServerUrl'), webDavSettings.serverUrl, (value) => {
+    webDavSettings.serverUrl = value;
+    clearWebDavQuickConfig();
+  }, 'https://example.com/dav/', 'webdav-url'));
+  grid.appendChild(webDavUsernameField());
+  grid.appendChild(textField(t('webDavPassword'), webDavSettings.password, (value) => {
+    webDavSettings.password = value;
+    clearWebDavQuickConfig();
+  }, '', 'webdav-credential', 'password'));
+  grid.appendChild(textField(t('webDavQuickConfig'), webDavQuickConfigText, (value) => {
+    webDavQuickConfigText = value;
+  }, '', 'webdav-quick-config', 'text', { 'data-nfs-webdav-quick-config': 'true' }));
+
+  const actions = createElement('div', { className: 'nfs-webdav-actions' });
+  actions.appendChild(button(t('webDavSave'), 'secondary', () => {
+    void validateAndSaveWebDavSettings();
+  }));
+  actions.appendChild(button(t('webDavParseQuickConfig'), 'secondary', () => {
+    void importWebDavQuickConfig();
+  }));
+  actions.appendChild(button(t('webDavUpload'), 'secondary', () => {
+    if (!window.confirm(t('confirmWebDavUpload'))) return;
+    void runWebDavAction('upload');
+  }));
+  actions.appendChild(button(t('webDavPull'), 'secondary', () => {
+    if (!window.confirm(t('confirmWebDavPull'))) return;
+    void runWebDavAction('pull');
+  }));
+
+  const status = createElement('p', {
+    className: `nfs-webdav-status is-${webDavSettings.lastResult}`,
+    text: webDavStatusText(),
+  });
+
+  section.append(grid, actions, status);
+  return section;
 }
 
 function renderBasicSection(rule: Rule): HTMLElement {
@@ -504,6 +587,8 @@ function textField(
   onInput: (value: string) => void,
   placeholder = '',
   size?: FieldSize,
+  inputType = 'text',
+  attrs: Record<string, string> = {},
 ): HTMLElement {
   const field = createElement('div', {
     className: `nfs-field${size ? ` nfs-field-${size}` : ''}`,
@@ -511,7 +596,8 @@ function textField(
   field.appendChild(createElement('label', { text: label }));
   const input = createElement('input', {
     attrs: {
-      type: 'text',
+      ...attrs,
+      type: inputType,
       value,
       placeholder,
     },
@@ -519,6 +605,35 @@ function textField(
   input.addEventListener('input', () => onInput(input.value));
   field.appendChild(input);
   return field;
+}
+
+function webDavUsernameField(): HTMLElement {
+  const field = createElement('div', { className: 'nfs-field nfs-field-webdav-credential' });
+  field.appendChild(createElement('label', { text: t('webDavUsername') }));
+  const input = createElement('input', {
+    attrs: {
+      type: 'text',
+      value: maskedWebDavUsername(),
+    },
+  });
+
+  input.addEventListener('focus', () => {
+    input.value = webDavSettings.username;
+  });
+  input.addEventListener('blur', () => {
+    input.value = maskedWebDavUsername();
+  });
+  input.addEventListener('input', () => {
+    webDavSettings.username = input.value;
+    clearWebDavQuickConfig();
+  });
+
+  field.appendChild(input);
+  return field;
+}
+
+function maskedWebDavUsername(): string {
+  return '*'.repeat(webDavSettings.username.length);
 }
 
 function textareaField(
@@ -697,17 +812,193 @@ async function persist(key: TranslationKey, values?: TranslationValues): Promise
   settings = await loadSettings();
   statusMessage = { key, values };
   render();
+  triggerAutoWebDavSync();
+}
+
+async function persistWebDavSettings(key: TranslationKey): Promise<void> {
+  webDavSettings = await saveWebDavSyncSettings(webDavSettings);
+  statusMessage = { key };
+  render();
+}
+
+async function validateAndSaveWebDavSettings(): Promise<void> {
+  clearWebDavQuickConfig();
+  statusMessage = { key: 'webDavValidating' };
+  render();
+
+  const settingsToSave = {
+    ...webDavSettings,
+    enabled: true,
+  };
+  const validation = await validateWebDavSyncSettings(settingsToSave);
+  if (!validation.ok) {
+    statusMessage = { raw: validation.message };
+    render();
+    return;
+  }
+
+  const quickConfig = encodeWebDavQuickConfig(settingsToSave);
+  webDavSettings = await saveWebDavSyncSettings({
+    ...settingsToSave,
+    quickConfig,
+    lastSyncAt: Date.now(),
+    lastResult: 'success',
+    lastMessage: validation.message,
+  });
+  webDavQuickConfigText = quickConfig;
+  statusMessage = { key: 'webDavSettingsSaved' };
+  render();
+}
+
+function clearWebDavQuickConfig(): void {
+  webDavQuickConfigText = '';
+  webDavSettings.quickConfig = '';
+  const input = document.querySelector<HTMLInputElement>('[data-nfs-webdav-quick-config="true"]');
+  if (input) input.value = '';
 }
 
 function renderedStatusMessage(): string {
   if (!statusMessage) {
     return t('lastUpdated', { date: formatDate(settings.updatedAt, getLocale()) });
   }
+  if ('raw' in statusMessage) return statusMessage.raw;
   if ('validationErrors' in statusMessage) {
     const separator = getLocale() === 'en' ? '; ' : '；';
     return statusMessage.validationErrors.map(translateValidationError).join(separator);
   }
   return t(statusMessage.key, statusMessage.values);
+}
+
+function webDavStatusText(): string {
+  if (!webDavSettings.lastSyncAt) return t('webDavNeverSynced');
+  return t('webDavLastStatus', {
+    date: formatDate(webDavSettings.lastSyncAt, getLocale()),
+    message: webDavSettings.lastMessage || '-',
+  });
+}
+
+async function runWebDavAction(action: WebDavSyncAction): Promise<void> {
+  webDavSettings = await saveWebDavSyncSettings(webDavSettings);
+  statusMessage = { key: 'webDavSyncWorking' };
+  render();
+
+  const syncResult = await requestWebDavSyncAction(action);
+  settings = await loadSettings();
+  webDavSettings = await loadWebDavSyncSettings();
+  if (selectedRuleId && !settings.rules.some((rule) => rule.id === selectedRuleId)) {
+    selectedRuleId = settings.rules[0]?.id ?? null;
+  }
+  statusMessage = { raw: syncResult.message };
+  render();
+}
+
+function triggerAutoWebDavSync(): void {
+  if (!webDavSettings.enabled || !webDavSettings.autoSync) return;
+
+  void requestWebDavSyncAction('auto')
+    .then(async () => {
+      settings = await loadSettings();
+      webDavSettings = await loadWebDavSyncSettings();
+      if (selectedRuleId && !settings.rules.some((rule) => rule.id === selectedRuleId)) {
+        selectedRuleId = settings.rules[0]?.id ?? null;
+      }
+      render();
+    })
+    .catch(() => undefined);
+}
+
+async function requestWebDavSyncAction(action: WebDavSyncAction): Promise<WebDavSyncResult> {
+  if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'neofetchspy:webdav-sync',
+        action,
+      }) as { ok?: boolean; result?: WebDavSyncResult; error?: string } | undefined;
+
+      if (response?.result) return response.result;
+      if (response?.error) throw new Error(response.error);
+    } catch {
+      // Fall back to direct execution for non-extension development builds.
+    }
+  }
+
+  return runWebDavSyncAction(action);
+}
+
+async function importWebDavQuickConfig(): Promise<void> {
+  const imported = decodeWebDavQuickConfig(webDavQuickConfigText);
+  if (!imported) {
+    statusMessage = { key: 'webDavQuickConfigInvalid' };
+    render();
+    return;
+  }
+
+  webDavSettings = await saveWebDavSyncSettings({
+    ...webDavSettings,
+    ...imported,
+    quickConfig: webDavQuickConfigText.trim(),
+  });
+  webDavQuickConfigText = webDavSettings.quickConfig;
+  statusMessage = { key: 'webDavQuickConfigImported' };
+  render();
+}
+
+function encodeWebDavQuickConfig(settingsToEncode: WebDavSyncSettings): string {
+  return toBase64Utf8(JSON.stringify({
+    format: WEBDAV_QUICK_CONFIG_FORMAT,
+    version: 1,
+    enabled: settingsToEncode.enabled,
+    autoSync: settingsToEncode.autoSync,
+    serverUrl: settingsToEncode.serverUrl,
+    username: settingsToEncode.username,
+    password: settingsToEncode.password,
+  }));
+}
+
+function decodeWebDavQuickConfig(value: string): Partial<WebDavSyncSettings> | null {
+  const text = value.trim();
+  if (!text) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fromBase64Utf8(text)) as unknown;
+  } catch {
+    return null;
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const candidate = parsed as Record<string, unknown>;
+  if (
+    candidate.format !== undefined
+    && candidate.format !== WEBDAV_QUICK_CONFIG_FORMAT
+  ) {
+    return null;
+  }
+  if (typeof candidate.serverUrl !== 'string') return null;
+
+  return {
+    enabled: typeof candidate.enabled === 'boolean' ? candidate.enabled : webDavSettings.enabled,
+    autoSync: typeof candidate.autoSync === 'boolean' ? candidate.autoSync : webDavSettings.autoSync,
+    serverUrl: candidate.serverUrl,
+    username: typeof candidate.username === 'string' ? candidate.username : '',
+    password: typeof candidate.password === 'string' ? candidate.password : '',
+  };
+}
+
+function toBase64Utf8(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function fromBase64Utf8(value: string): string {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 function duplicateRule(rule: Rule): void {

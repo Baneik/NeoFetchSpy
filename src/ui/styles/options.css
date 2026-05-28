@@ -306,6 +306,10 @@ html[lang="ja"] .nfs-tools .nfs-btn {
   width: 100%;
 }
 
+.nfs-section-webdav {
+  width: 100%;
+}
+
 .nfs-settings-fields {
   display: grid;
   gap: 14px;
@@ -509,6 +513,52 @@ html[lang="ja"] .nfs-tools .nfs-btn {
   width: 6rem;
 }
 
+.nfs-webdav-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+.nfs-webdav-switch {
+  min-height: var(--nfs-control-height);
+  padding: 0 2px;
+  color: var(--nfs-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nfs-field-webdav-url {
+  grid-column: 1 / -1;
+}
+
+.nfs-field-webdav-quick-config {
+  grid-column: 1 / -1;
+}
+
+.nfs-field-webdav-credential {
+  min-width: 0;
+}
+
+.nfs-webdav-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nfs-webdav-status {
+  margin: 0;
+  color: var(--nfs-muted);
+  font-size: 12px;
+}
+
+.nfs-webdav-status.is-success {
+  color: var(--nfs-accent-strong);
+}
+
+.nfs-webdav-status.is-error {
+  color: var(--nfs-danger);
+}
+
 .nfs-actions {
   display: grid;
   gap: 10px;
@@ -699,6 +749,10 @@ html[lang="ja"] .nfs-tools .nfs-btn {
     flex: 1 1 auto;
     width: 100%;
     max-width: none;
+  }
+
+  .nfs-webdav-grid {
+    grid-template-columns: 1fr;
   }
 
   .nfs-action-controls {

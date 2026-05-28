@@ -39,6 +39,7 @@ function render(): void {
     await saveSettings(settings);
     settings = await loadSettings();
     render();
+    triggerAutoWebDavSync();
   }));
 
   const language = createElement('label', { className: 'nfs-popup-language' });
@@ -60,6 +61,7 @@ function render(): void {
         await saveSettings(settings);
         settings = await loadSettings();
         render();
+        triggerAutoWebDavSync();
       }));
       rules.appendChild(row);
     }
@@ -111,4 +113,12 @@ function createSwitch(
   input.addEventListener('change', () => void onChange(input.checked));
   label.append(input, createElement('span'));
   return label;
+}
+
+function triggerAutoWebDavSync(): void {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return;
+  void chrome.runtime.sendMessage({
+    type: 'neofetchspy:webdav-sync',
+    action: 'auto',
+  }).catch(() => undefined);
 }
