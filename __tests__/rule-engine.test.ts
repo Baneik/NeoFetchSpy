@@ -38,9 +38,10 @@ describe('rule engine', () => {
 
   it('respects global and rule enabled state', () => {
     const settings: RuntimeSettings = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       enabled: true,
       rules: [rule],
+      presets: {},
       updatedAt: 1,
       debug: false,
     };

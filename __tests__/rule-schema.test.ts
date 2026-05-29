@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createRule,
+  DEFAULT_SETTINGS,
   decodeRuleId,
   encodeRuleId,
   generateRuleId,
   parseRulesImport,
+  toPageRuntimeSettings,
   validateCondition,
   validateRule,
 } from '../src/core/rule-schema';
@@ -147,5 +149,69 @@ describe('rule schema', () => {
 
     expect(result.errors).toEqual([]);
     expect(result.rules[0].scope?.pageHosts).toEqual(['example.com', '*.example.com']);
+  });
+
+  it('resolves presets in runtime action values only', () => {
+    const rule = createRule({
+      id: 'preset-rule',
+      match: {
+        url: '*://api.example.com/$keyword1',
+        query: { q: '$keyword1' },
+      },
+      actions: [
+        {
+          type: 'filter',
+          iterablePath: '$.items',
+          condition: { field: 'title', operator: 'text_contains', value: '$keyword1' },
+        },
+        { type: 'replace', path: '$.label', value: '$label' },
+        { type: 'regex', pattern: '$regex1', replacement: '$replacement1' },
+      ],
+    });
+
+    const pageSettings = toPageRuntimeSettings({
+      ...DEFAULT_SETTINGS,
+      presets: {
+        keyword1: '淘宝|京东',
+        label: 'patched',
+        regex1: '\\d+',
+        replacement1: 'NUM',
+      },
+      rules: [rule],
+    });
+
+    expect(pageSettings.rules[0].match.url).toBe('*://api.example.com/$keyword1');
+    expect(pageSettings.rules[0].match.query).toEqual({ q: '$keyword1' });
+    expect(pageSettings.rules[0].actions).toEqual([
+      {
+        type: 'filter',
+        iterablePath: '$.items',
+        condition: { field: 'title', operator: 'text_contains', value: '淘宝|京东' },
+      },
+      { type: 'replace', path: '$.label', value: 'patched' },
+      { type: 'regex', pattern: '\\d+', replacement: 'NUM' },
+    ]);
+  });
+
+  it('validates preset references against the settings preset table', () => {
+    expect(validateRule(createRule({
+      actions: [
+        {
+          type: 'filter',
+          iterablePath: '$.items',
+          condition: { field: 'title', operator: 'text_contains', value: '$keyword1' },
+        },
+      ],
+    }), { keyword1: '淘宝|京东' }).valid).toBe(true);
+
+    expect(validateRule(createRule({
+      actions: [
+        {
+          type: 'filter',
+          iterablePath: '$.items',
+          condition: { field: 'title', operator: 'text_contains', value: '$missing' },
+        },
+      ],
+    }), { keyword1: '淘宝|京东' }).valid).toBe(false);
   });
 });

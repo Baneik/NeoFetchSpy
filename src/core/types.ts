@@ -1,5 +1,5 @@
 export const RULE_SCHEMA_VERSION = 1;
-export const SETTINGS_SCHEMA_VERSION = 1;
+export const SETTINGS_SCHEMA_VERSION = 2;
 
 export type HttpMethod =
   | 'GET'
@@ -62,6 +62,8 @@ export interface RegexAction {
 
 export type Action = DeleteAction | ReplaceAction | FilterAction | RegexAction;
 
+export type PresetTable = Record<string, string>;
+
 export interface MatchCondition {
   url: string;
   method?: HttpMethod;
@@ -99,6 +101,7 @@ export interface RuntimeSettings {
   schemaVersion: typeof SETTINGS_SCHEMA_VERSION;
   enabled: boolean;
   rules: Rule[];
+  presets: PresetTable;
   updatedAt: number;
   debug: boolean;
 }

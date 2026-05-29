@@ -306,7 +306,8 @@ html[lang="ja"] .nfs-tools .nfs-btn {
   width: 100%;
 }
 
-.nfs-section-webdav {
+.nfs-section-webdav,
+.nfs-section-presets {
   width: 100%;
 }
 
@@ -441,6 +442,15 @@ html[lang="ja"] .nfs-tools .nfs-btn {
   gap: 8px;
 }
 
+.nfs-section-presets .nfs-kv {
+  width: 100%;
+  max-width: 62rem;
+}
+
+.nfs-section-presets .nfs-kv-row {
+  grid-template-columns: minmax(9rem, 14rem) minmax(22rem, 1fr) auto;
+}
+
 .nfs-kv-cell {
   display: grid;
   gap: 5px;
@@ -543,6 +553,11 @@ html[lang="ja"] .nfs-tools .nfs-btn {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.nfs-preset-actions {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .nfs-webdav-status {

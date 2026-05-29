@@ -259,6 +259,7 @@ function renderSettingsPane(pane: HTMLElement): HTMLElement {
   const body = createElement('div', { className: 'nfs-editor-body nfs-settings-body' });
   body.appendChild(section);
   body.appendChild(renderWebDavSection());
+  body.appendChild(renderPresetsSection());
 
   const content = createElement('div', { className: 'nfs-editor-content nfs-settings-content' });
   content.append(header, body);
@@ -323,6 +324,20 @@ function renderWebDavSection(): HTMLElement {
   });
 
   section.append(grid, actions, status);
+  return section;
+}
+
+function renderPresetsSection(): HTMLElement {
+  const section = sectionCard(t('presets'), 'nfs-section-presets');
+  section.appendChild(keyValueEditor(t('presetEntries'), settings.presets, (next) => {
+    settings.presets = next;
+  }));
+
+  const actions = createElement('div', { className: 'nfs-preset-actions' });
+  actions.appendChild(button(t('savePresets'), 'primary', () => {
+    void persist('presetsSaved');
+  }));
+  section.appendChild(actions);
   return section;
 }
 
@@ -798,7 +813,7 @@ function iconButton(
 
 async function saveCurrentRule(rule: Rule): Promise<void> {
   rule.updatedAt = Date.now();
-  const validation = validateRule(rule);
+  const validation = validateRule(rule, settings.presets);
   if (!validation.valid) {
     statusMessage = { validationErrors: validation.errors };
     render();

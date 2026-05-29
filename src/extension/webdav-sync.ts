@@ -1,14 +1,16 @@
 import { normalizeSettings } from '../core/rule-schema';
-import type { Rule, RuntimeSettings } from '../core/types';
+import type { PresetTable, Rule, RuntimeSettings } from '../core/types';
 import { loadSettings, saveSettings } from './storage';
 
 export const WEBDAV_SYNC_STORAGE_KEY = 'neofetchspy_webdav_sync';
 export const WEBDAV_RULES_DOCUMENT_FORMAT = 'neofetchspy-webdav-rules';
 export const WEBDAV_SETTINGS_DOCUMENT_FORMAT = 'neofetchspy-webdav-settings';
+export const WEBDAV_PRESETS_DOCUMENT_FORMAT = 'neofetchspy-webdav-presets';
 export const WEBDAV_SYNC_SCHEMA_VERSION = 1;
 export const WEBDAV_SYNC_REMOTE_DIR = 'NeoFetchSPY';
 export const WEBDAV_RULES_FILENAME = 'rule.json';
 export const WEBDAV_SETTINGS_FILENAME = 'setting.json';
+export const WEBDAV_PRESETS_FILENAME = 'preset.json';
 
 export type WebDavSyncAction = 'test' | 'upload' | 'pull' | 'auto';
 export type WebDavLastResult = 'never' | 'success' | 'error' | 'skipped';
@@ -49,6 +51,7 @@ interface SyncedRuntimeSettings {
   enabled: boolean;
   debug: boolean;
   rules: Rule[];
+  presets: PresetTable;
 }
 
 interface SyncedAppSettings {
@@ -70,6 +73,14 @@ interface WebDavSettingsDocument {
   exportedAt: number;
   clientId: string;
   settings: SyncedAppSettings;
+}
+
+interface WebDavPresetsDocument {
+  format: typeof WEBDAV_PRESETS_DOCUMENT_FORMAT;
+  version: typeof WEBDAV_SYNC_SCHEMA_VERSION;
+  exportedAt: number;
+  clientId: string;
+  presets: PresetTable;
 }
 
 interface RemoteDocumentResult {
@@ -389,6 +400,17 @@ async function uploadSettingsDocument(
   );
   ensureSuccessfulResponse(settingsResponse, 'WebDAV setting upload failed');
 
+  const presetsResponse = await webDavRequest(
+    syncSettings,
+    buildRemoteFileUrl(syncSettings, WEBDAV_PRESETS_FILENAME),
+    {
+      method: 'PUT',
+      body: JSON.stringify(documents.presetsDocument, null, 2),
+      headers: { 'content-type': 'application/json;charset=utf-8' },
+    },
+  );
+  ensureSuccessfulResponse(presetsResponse, 'WebDAV preset upload failed');
+
   const hash = await hashSyncedSettings(toSyncedSettings(settings));
   return {
     localHash: hash,
@@ -396,6 +418,7 @@ async function uploadSettingsDocument(
     remoteEtag: combineEtags(
       rulesResponse.headers.get('etag'),
       settingsResponse.headers.get('etag'),
+      presetsResponse.headers.get('etag'),
     ),
   };
 }
@@ -420,11 +443,19 @@ async function downloadRemoteDocument(
     ensureSuccessfulResponse(settingsResponse, 'WebDAV setting download failed');
   }
 
+  const presetsResponse = await webDavRequest(
+    syncSettings,
+    buildRemoteFileUrl(syncSettings, WEBDAV_PRESETS_FILENAME),
+    { method: 'GET' },
+  );
+  ensureSuccessfulResponse(presetsResponse, 'WebDAV preset download failed');
+
   const remoteSettings = parseRemoteDocuments(
     await parseJsonResponse(rulesResponse, 'Remote WebDAV rule file is not valid JSON'),
     settingsResponse.status === 404
       ? undefined
       : await parseJsonResponse(settingsResponse, 'Remote WebDAV setting file is not valid JSON'),
+    await parseJsonResponse(presetsResponse, 'Remote WebDAV preset file is not valid JSON'),
   );
   if (!remoteSettings) throw new Error('Remote WebDAV files are not NeoFetchSPY sync files');
 
@@ -433,6 +464,7 @@ async function downloadRemoteDocument(
     etag: combineEtags(
       rulesResponse.headers.get('etag'),
       settingsResponse.status === 404 ? null : settingsResponse.headers.get('etag'),
+      presetsResponse.headers.get('etag'),
     ),
     hash: await hashSettings(remoteSettings),
   };
@@ -446,13 +478,20 @@ async function parseJsonResponse(response: Response, invalidMessage: string): Pr
   }
 }
 
-function parseRemoteDocuments(rulesInput: unknown, settingsInput: unknown): RuntimeSettings | null {
+function parseRemoteDocuments(
+  rulesInput: unknown,
+  settingsInput: unknown,
+  presetsInput: unknown,
+): RuntimeSettings | null {
   const rules = parseRemoteRules(rulesInput);
   if (!rules) return null;
   const appSettings = parseRemoteAppSettings(settingsInput);
+  const presets = parseRemotePresets(presetsInput);
+  if (!presets) return null;
   return normalizeSettings({
     ...appSettings,
     rules,
+    presets,
   });
 }
 
@@ -476,6 +515,18 @@ function parseRemoteAppSettings(input: unknown): Partial<Pick<RuntimeSettings, '
     enabled: typeof source.enabled === 'boolean' ? source.enabled : undefined,
     debug: typeof source.debug === 'boolean' ? source.debug : undefined,
   };
+}
+
+function parseRemotePresets(input: unknown): PresetTable | null {
+  if (!isRecord(input)) return null;
+  const source = input.format === WEBDAV_PRESETS_DOCUMENT_FORMAT && isRecord(input.presets)
+    ? input.presets
+    : input;
+  const presets: PresetTable = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value === 'string') presets[key] = value;
+  }
+  return presets;
 }
 
 function mergeRemoteIntoLocal(
@@ -518,6 +569,10 @@ function mergeRemoteIntoLocal(
       enabled: remoteSettings.enabled,
       debug: remoteSettings.debug,
       rules: mergedRules,
+      presets: {
+        ...localSettings.presets,
+        ...remoteSettings.presets,
+      },
     }),
     summary,
   };
@@ -526,7 +581,11 @@ function mergeRemoteIntoLocal(
 function createRemoteDocuments(
   settings: RuntimeSettings,
   clientId: string,
-): { rulesDocument: WebDavRulesDocument; settingsDocument: WebDavSettingsDocument } {
+): {
+  rulesDocument: WebDavRulesDocument;
+  settingsDocument: WebDavSettingsDocument;
+  presetsDocument: WebDavPresetsDocument;
+} {
   const exportedAt = Date.now();
   return {
     rulesDocument: {
@@ -543,6 +602,13 @@ function createRemoteDocuments(
       clientId,
       settings: toSyncedAppSettings(settings),
     },
+    presetsDocument: {
+      format: WEBDAV_PRESETS_DOCUMENT_FORMAT,
+      version: WEBDAV_SYNC_SCHEMA_VERSION,
+      exportedAt,
+      clientId,
+      presets: settings.presets,
+    },
   };
 }
 
@@ -551,6 +617,7 @@ function toSyncedSettings(settings: RuntimeSettings): SyncedRuntimeSettings {
     enabled: settings.enabled,
     debug: settings.debug,
     rules: settings.rules,
+    presets: settings.presets,
   };
 }
 

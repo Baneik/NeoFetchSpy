@@ -6,6 +6,7 @@ import {
   type FilterOperator,
   type HttpMethod,
   type PageRuntimeSettings,
+  type PresetTable,
   type Rule,
   type RuntimeRule,
   type RuntimeSettings,
@@ -90,6 +91,7 @@ export const DEFAULT_SETTINGS: RuntimeSettings = {
   schemaVersion: SETTINGS_SCHEMA_VERSION,
   enabled: true,
   rules: [],
+  presets: {},
   updatedAt: 0,
   debug: false,
 };
@@ -135,6 +137,7 @@ export function normalizeSettings(input: unknown): RuntimeSettings {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     enabled: typeof input.enabled === 'boolean' ? input.enabled : true,
     rules: importedRules,
+    presets: normalizePresets(input.presets),
     updatedAt: typeof input.updatedAt === 'number' ? input.updatedAt : Date.now(),
     debug: typeof input.debug === 'boolean' ? input.debug : false,
   };
@@ -152,7 +155,7 @@ export function toPageRuntimeSettings(
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     enabled: settings.enabled,
     debug: settings.debug,
-    rules: scopedRules.map(toRuntimeRule),
+    rules: scopedRules.map((rule) => toRuntimeRule(rule, settings.presets)),
   };
 }
 
@@ -227,7 +230,7 @@ export function normalizeRule(input: unknown): Rule | null {
   };
 }
 
-export function validateRule(rule: Rule): ValidationResult {
+export function validateRule(rule: Rule, presets?: PresetTable): ValidationResult {
   const errors: string[] = [];
 
   if (!rule.name.trim()) errors.push('规则名称不能为空');
@@ -248,18 +251,29 @@ export function validateRule(rule: Rule): ValidationResult {
     if (action.type === 'replace' && !action.path.trim()) {
       errors.push(`${prefix}: JSONPath 不能为空`);
     }
+    if (action.type === 'replace') {
+      const missingPreset = missingPresetReference(action.value, presets);
+      if (missingPreset) errors.push(`${prefix}: 预设不存在：${missingPreset}`);
+    }
     if (action.type === 'filter') {
       if (!action.iterablePath.trim()) errors.push(`${prefix}: 数组路径不能为空`);
-      if (!validateCondition(action.condition).valid) {
+      if (!validateCondition(action.condition, presets).valid) {
         errors.push(`${prefix}: 条件无效`);
       }
     }
     if (action.type === 'regex') {
-      if (!action.pattern) errors.push(`${prefix}: 正则表达式不能为空`);
-      try {
-        new RegExp(action.pattern, action.flags ?? '');
-      } catch {
-        errors.push(`${prefix}: 正则表达式或 flags 无效`);
+      const missingPatternPreset = missingPresetReference(action.pattern, presets);
+      const missingReplacementPreset = missingPresetReference(action.replacement, presets);
+      if (missingPatternPreset) errors.push(`${prefix}: 预设不存在：${missingPatternPreset}`);
+      if (missingReplacementPreset) errors.push(`${prefix}: 预设不存在：${missingReplacementPreset}`);
+      const pattern = resolvePresetReference(action.pattern, presets);
+      if (typeof pattern !== 'string' || !pattern) errors.push(`${prefix}: 正则表达式不能为空`);
+      if (!isUnresolvedPresetReference(action.pattern, presets)) {
+        try {
+          new RegExp(String(pattern), action.flags ?? '');
+        } catch {
+          errors.push(`${prefix}: 正则表达式或 flags 无效`);
+        }
       }
     }
   });
@@ -267,32 +281,38 @@ export function validateRule(rule: Rule): ValidationResult {
   return { valid: errors.length === 0, errors };
 }
 
-export function validateCondition(condition: FilterCondition): ValidationResult {
+export function validateCondition(condition: FilterCondition, presets?: PresetTable): ValidationResult {
   const errors: string[] = [];
+  const presetName = getPresetReferenceName(condition.value);
+  const presetMissing = presetName !== null && presets !== undefined && !(presetName in presets);
+  const value = resolvePresetReference(condition.value, presets);
+
   if (!condition.field.trim()) errors.push('字段路径不能为空');
   if (!FILTER_OPERATORS.has(condition.operator)) errors.push('操作符无效');
+  if (presetMissing) errors.push(`预设不存在：${presetName}`);
   if (
-    VALUE_FILTER_OPERATORS.has(condition.operator) && condition.value === undefined
+    VALUE_FILTER_OPERATORS.has(condition.operator) && value === undefined
   ) {
     errors.push('该操作符需要比较值');
   }
+  if (isUnresolvedPresetReference(condition.value, presets)) return { valid: errors.length === 0, errors };
   if (
     KEYWORD_FILTER_OPERATORS.has(condition.operator)
-    && !hasKeywords(condition.value)
+    && !hasKeywords(value)
   ) {
     errors.push('关键词不能为空');
   }
-  if (condition.operator === 'text_regex' && isBlankString(condition.value)) {
+  if (condition.operator === 'text_regex' && isBlankString(value)) {
     errors.push('正则表达式不能为空');
   }
-  if (condition.operator === 'text_regex' && condition.value !== undefined) {
+  if (condition.operator === 'text_regex' && value !== undefined) {
     try {
-      new RegExp(String(condition.value));
+      new RegExp(String(value));
     } catch {
       errors.push('正则表达式无效');
     }
   }
-  if (condition.operator.startsWith('number_') && !isFiniteNumberLiteral(condition.value)) {
+  if (condition.operator.startsWith('number_') && !isFiniteNumberLiteral(value)) {
     errors.push('数值比较值无效');
   }
   return { valid: errors.length === 0, errors };
@@ -342,14 +362,79 @@ export function decodeRuleId(id: string): DecodedRuleId | null {
   };
 }
 
-function toRuntimeRule(rule: Rule): RuntimeRule {
+function toRuntimeRule(rule: Rule, presets: PresetTable): RuntimeRule {
   return {
     id: rule.id,
     enabled: rule.enabled,
     match: rule.match,
     responseType: rule.responseType,
-    actions: rule.actions,
+    actions: rule.actions.map((action) => resolveActionPresets(action, presets)),
   };
+}
+
+function resolveActionPresets(action: Action, presets: PresetTable): Action {
+  if (action.type === 'filter') {
+    return {
+      ...action,
+      condition: {
+        ...action.condition,
+        value: resolvePresetReference(action.condition.value, presets),
+      },
+    };
+  }
+
+  if (action.type === 'replace') {
+    return {
+      ...action,
+      value: resolvePresetReference(action.value, presets),
+    };
+  }
+
+  if (action.type === 'regex') {
+    return {
+      ...action,
+      pattern: String(resolvePresetReference(action.pattern, presets)),
+      replacement: String(resolvePresetReference(action.replacement, presets)),
+    };
+  }
+
+  return action;
+}
+
+export function resolvePresetReference(value: unknown, presets: PresetTable | undefined): unknown {
+  const presetName = getPresetReferenceName(value);
+  if (presetName === null || presets === undefined || !(presetName in presets)) return value;
+  return presets[presetName];
+}
+
+function getPresetReferenceName(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.startsWith('$') || value.length <= 1) return null;
+  return value.slice(1);
+}
+
+function isUnresolvedPresetReference(value: unknown, presets: PresetTable | undefined): boolean {
+  return getPresetReferenceName(value) !== null && presets === undefined;
+}
+
+function missingPresetReference(value: unknown, presets: PresetTable | undefined): string | null {
+  const presetName = getPresetReferenceName(value);
+  if (presetName === null || presets === undefined || presetName in presets) return null;
+  return presetName;
+}
+
+function normalizePresets(input: unknown): PresetTable {
+  if (!isRecord(input)) return {};
+  const result: PresetTable = {};
+  for (const [rawKey, value] of Object.entries(input)) {
+    const key = normalizePresetName(rawKey);
+    if (!key || typeof value !== 'string') continue;
+    result[key] = value;
+  }
+  return result;
+}
+
+function normalizePresetName(input: string): string {
+  return input.trim().replace(/^\$+/, '').trim();
 }
 
 function normalizeAction(input: unknown): Action | null {
